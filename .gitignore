@@ -1,0 +1,17 @@
+*.h5
+*.hdf5
+*.bam
+*.fastq
+*.fastq.gz
+*.fq.gz
+STcompare_plots/
+*.png
+*.jpg
+*.jpeg
+*.tif
+*.tiff
+*.pdf
+.Rhistory
+.RData
+.Rproj.user/
+.DS_Store
