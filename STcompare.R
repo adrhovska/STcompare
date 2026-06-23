@@ -106,9 +106,8 @@ output_dirs <- c(
   dir_pixel
 )
 
-for (d in output_dirs) {
-  dir.create(d, showWarnings = FALSE, recursive = TRUE)
-}
+invisible(lapply(output_dirs, dir.create,
+                 showWarnings = FALSE, recursive = TRUE))
 
 epithelial_genes      <- c("KRT4", "KRT5", "IVL")
 smooth_muscle_genes   <- c("SMTN", "CALD1", "CSRP1", "TAGLN")
@@ -250,7 +249,7 @@ check_coordinate_system <- function(coords1, coords2, sample_aligned_name, sampl
     )
   }
   
-  invisible(ranges)
+  invisible(NULL)
 }
 
 match_counts_to_positions <- function(counts, pos, sample_name) {
@@ -281,8 +280,8 @@ match_counts_to_positions <- function(counts, pos, sample_name) {
 
 counts1 <- get_gene_expression(Read10X_h5(cfg$counts1))
 counts2 <- get_gene_expression(Read10X_h5(cfg$counts2))
-cat("Native 1 dims:", dim(counts1), "\n")
-cat("Native 2 dims:", dim(counts2), "\n")
+cat(sample_aligned_name, "dims:", dim(counts1), "\n")
+cat(sample_reference_name, "dims:", dim(counts2), "\n")
 
 pos1 <- read_aligned_positions(
   path = cfg$pos1,
@@ -343,13 +342,13 @@ p_overlap <- ggplot(df_coords, aes(x = x, y = y, colour = sample)) +
   theme_minimal() +
   labs(
     title = "Coordinate overlap check",
-    x = "x coordinate (hires image pixels)",
-    y = "y coordinate (hires image pixels)",
+    x = "x coordinate",
+    y = "y coordinate",
     colour = "Sample"
   )
 
 ggsave(
-  file.path(dir_qc, "coordinate_overlap.png"),
+  file.path(dir_qc, "Coordinate_Overlap.png"),
   p_overlap,
   width = 7,
   height = 6,
@@ -380,19 +379,14 @@ rastList <- SEraster::rasterizeGeneExpression(
   square = FALSE
 )
 
-rast_compare_list <- setNames(
-  list(rastList[[sample_aligned_name]], rastList[[sample_reference_name]]),
-  c(sample_aligned_name, sample_reference_name)
-)
-
 # STcompare
 sc <- spatialCorrelationGeneExp(
-  rast_compare_list,
+  rastList,
   nThreads = cfg$threads
 )
 
 ss <- spatialSimilarity(
-  rast_compare_list
+  rastList
 )
 
 genes_in_sc <- genes_of_interest[
@@ -424,7 +418,7 @@ print(results)
 
 write.csv(
   results,
-  file.path(dir_results, "results_table.csv")
+  file.path(dir_results, "Results_Table.csv")
 )
 
 # Identify raster assay name
@@ -456,35 +450,27 @@ all_y <- all_y[is.finite(all_y)]
 raster_resolution <- cfg$res
 raster_padding_multiplier <- 2
 
-x_pad <- raster_resolution * raster_padding_multiplier
-y_pad <- raster_resolution * raster_padding_multiplier
+spatial_pad <- raster_resolution * raster_padding_multiplier
 
-shared_xlim <- c(
-  min(all_x) - x_pad,
-  max(all_x) + x_pad
-)
-
-shared_ylim <- c(
-  min(all_y) - y_pad,
-  max(all_y) + y_pad
-)
+shared_xlim <- c(min(all_x) - spatial_pad, max(all_x) + spatial_pad)
+shared_ylim <- c(min(all_y) - spatial_pad, max(all_y) + spatial_pad)
 
 spatial_unit_label <- paste0(cfg$scale, " image pixels")
 expression_unit_label <- "rasterised raw counts"
 
 
-get_shared_gene_limits <- function(rastList, gene, assay_name) {
+get_shared_gene_limits <- function(rastList, gene, assay_name, name1, name2) {
   
   vals1 <- as.numeric(
     SummarizedExperiment::assay(
-      rastList[[sample_aligned_name]],
+      rastList[[name1]],
       assay_name
     )[gene, ]
   )
   
   vals2 <- as.numeric(
     SummarizedExperiment::assay(
-      rastList[[sample_reference_name]],
+      rastList[[name2]],
       assay_name
     )[gene, ]
   )
@@ -505,63 +491,71 @@ get_shared_gene_limits <- function(rastList, gene, assay_name) {
   limits
 }
 
-make_raster_pair <- function(gene) {
+make_single_raster <- function(rast, name, gene, gene_limits,
+                                rast_assay, shared_xlim, shared_ylim,
+                                spatial_unit_label,
+                                expression_unit_label) {
+  SEraster::plotRaster(
+    rast,
+    assay_name  = rast_assay,
+    feature_name = gene,
+    plotTitle   = paste(name, "-", gene)
+  ) +
+    ggplot2::scale_fill_viridis_c(
+      limits = gene_limits,
+      oob    = scales::squish,
+      name   = paste0(gene, "\n", expression_unit_label)
+    ) +
+    ggplot2::coord_sf(
+      xlim   = shared_xlim,
+      ylim   = shared_ylim,
+      expand = FALSE,
+      clip   = "off"
+    ) +
+    ggplot2::labs(
+      x = paste0("x coordinate (", spatial_unit_label, ")"),
+      y = paste0("y coordinate (", spatial_unit_label, ")")
+    ) +
+    ggplot2::theme(plot.margin = ggplot2::margin(10, 10, 10, 10))
+}
+
+make_raster_pair <- function(gene, rastList, rast_assay,
+                              name1, name2,
+                              shared_xlim, shared_ylim,
+                              spatial_unit_label,
+                              expression_unit_label) {
   
   gene_limits <- get_shared_gene_limits(
     rastList = rastList,
     gene = gene,
-    assay_name = rast_assay
+    assay_name = rast_assay,
+    name1 = name1,
+    name2 = name2
   )
   
-  p1 <- SEraster::plotRaster(
-    rastList[[sample_aligned_name]],
-    assay_name = rast_assay,
-    feature_name = gene,
-    plotTitle = paste(sample_aligned_name, "-", gene)
-  ) +
-    ggplot2::scale_fill_viridis_c(
-      limits = gene_limits,
-      oob = scales::squish,
-      name = paste0(gene, "\n", expression_unit_label)
-    ) +
-    ggplot2::coord_sf(
-      xlim = shared_xlim,
-      ylim = shared_ylim,
-      expand = FALSE,
-      clip = "off"
-    ) +
-    ggplot2::labs(
-      x = paste0("x coordinate (", spatial_unit_label, ")"),
-      y = paste0("y coordinate (", spatial_unit_label, ")")
-    ) +
-    ggplot2::theme(
-      plot.margin = ggplot2::margin(10, 10, 10, 10)
-    )
-  
-  p2 <- SEraster::plotRaster(
-    rastList[[sample_reference_name]],
-    assay_name = rast_assay,
-    feature_name = gene,
-    plotTitle = paste(sample_reference_name, "-", gene)
-  ) +
-    ggplot2::scale_fill_viridis_c(
-      limits = gene_limits,
-      oob = scales::squish,
-      name = paste0(gene, "\n", expression_unit_label)
-    ) +
-    ggplot2::coord_sf(
-      xlim = shared_xlim,
-      ylim = shared_ylim,
-      expand = FALSE,
-      clip = "off"
-    ) +
-    ggplot2::labs(
-      x = paste0("x coordinate (", spatial_unit_label, ")"),
-      y = paste0("y coordinate (", spatial_unit_label, ")")
-    ) +
-    ggplot2::theme(
-      plot.margin = ggplot2::margin(10, 10, 10, 10)
-    )
+  p1 <- make_single_raster(
+    rast                 = rastList[[name1]],
+    name                 = name1,
+    gene                 = gene,
+    gene_limits          = gene_limits,
+    rast_assay           = rast_assay,
+    shared_xlim          = shared_xlim,
+    shared_ylim          = shared_ylim,
+    spatial_unit_label   = spatial_unit_label,
+    expression_unit_label = expression_unit_label
+)
+
+p2 <- make_single_raster(
+    rast                 = rastList[[name2]],
+    name                 = name2,
+    gene                 = gene,
+    gene_limits          = gene_limits,
+    rast_assay           = rast_assay,
+    shared_xlim          = shared_xlim,
+    shared_ylim          = shared_ylim,
+    spatial_unit_label   = spatial_unit_label,
+    expression_unit_label = expression_unit_label
+)
   
   p1 + p2 +
     patchwork::plot_layout(guides = "collect") &
@@ -572,10 +566,20 @@ for (gene in genes_of_interest) {
   
   if (gene %in% genes_in_sc) {
     
-    p_raster <- make_raster_pair(gene)
+    p_raster <- make_raster_pair(
+      gene                 = gene,
+      rastList             = rastList,
+      rast_assay           = rast_assay,
+      name1                = sample_aligned_name,
+      name2                = sample_reference_name,
+      shared_xlim          = shared_xlim,
+      shared_ylim          = shared_ylim,
+     spatial_unit_label   = spatial_unit_label,
+      expression_unit_label = expression_unit_label
+)
     
     ggsave(
-      file.path(dir_raster, paste0(gene, "_raster.png")),
+      file.path(dir_raster, paste0(gene, "_Raster.png")),
       p_raster,
       width = 11,
       height = 5.5,
@@ -584,13 +588,13 @@ for (gene in genes_of_interest) {
     )
     
     p_cor <- plotCorrelationGeneExp(
-      rast_compare_list,
+      rastList,
       sc,
       gene
     )
     
     ggsave(
-      file.path(dir_correlation, paste0(gene, "_correlation.png")),
+      file.path(dir_correlation, paste0(gene, "_Correlation.png")),
       p_cor,
       width = 10,
       height = 5,
@@ -602,7 +606,7 @@ for (gene in genes_of_interest) {
   p_lr <- linearRegression(input = ss, gene = gene)
   
   ggsave(
-    file.path(dir_linear, paste0(gene, "_linearRegression.png")),
+    file.path(dir_linear, paste0(gene, "_LinearRegression.png")),
     p_lr,
     width = 10,
     height = 5,
@@ -613,7 +617,7 @@ for (gene in genes_of_interest) {
   p_pc <- pixelClass(input = ss, gene = gene)
   
   ggsave(
-    file.path(dir_pixel, paste0(gene, "_pixelClass.png")),
+    file.path(dir_pixel, paste0(gene, "_PixelClass.png")),
     p_pc,
     width = 10,
     height = 5,
