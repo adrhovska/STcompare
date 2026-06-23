@@ -76,6 +76,26 @@ cat("sample_reference  :", cfg$sample_reference,  "\n")
 
 dir.create(cfg$outdir, showWarnings = FALSE, recursive = TRUE)
 
+dir_results <- file.path(cfg$outdir, "00_results")
+dir_qc <- file.path(cfg$outdir, "01_coordinate_qc")
+dir_raster <- file.path(cfg$outdir, "02_raster_plots")
+dir_correlation <- file.path(cfg$outdir, "03_correlation_plots")
+dir_linear <- file.path(cfg$outdir, "04_linear_regression")
+dir_pixel <- file.path(cfg$outdir, "05_pixel_class")
+
+output_dirs <- c(
+  dir_results,
+  dir_qc,
+  dir_raster,
+  dir_correlation,
+  dir_linear,
+  dir_pixel
+)
+
+for (d in output_dirs) {
+  dir.create(d, showWarnings = FALSE, recursive = TRUE)
+}
+
 epithelial_genes      <- c("KRT4", "KRT5", "IVL")
 smooth_muscle_genes   <- c("SMTN", "CALD1", "CSRP1", "TAGLN")
 skeletal_muscle_genes <- c("TNNC1", "TNNC2", "ACTC1", "MYH8")
@@ -315,7 +335,7 @@ p_overlap <- ggplot(df_coords, aes(x = x, y = y, colour = sample)) +
   )
 
 ggsave(
-  file.path(cfg$outdir, "coordinate_overlap.png"),
+  file.path(dir_qc, "coordinate_overlap.png"),
   p_overlap,
   width = 7,
   height = 6,
@@ -390,7 +410,7 @@ print(results)
 
 write.csv(
   results,
-  file.path(cfg$outdir, "results_table.csv")
+  file.path(dir_results, "results_table.csv")
 )
 
 # Identify raster assay name
@@ -505,10 +525,10 @@ make_raster_pair <- function(gene) {
     )
   
   p2 <- SEraster::plotRaster(
-    rastList[[sample2_name]],
+    rastList[[sample_reference_name]],
     assay_name = rast_assay,
     feature_name = gene,
-    plotTitle = paste(sample2_name, "-", gene)
+    plotTitle = paste(sample_reference_name, "-", gene)
   ) +
     ggplot2::scale_fill_viridis_c(
       limits = gene_limits,
@@ -541,7 +561,7 @@ for (gene in genes_of_interest) {
     p_raster <- make_raster_pair(gene)
     
     ggsave(
-      file.path(cfg$outdir, paste0(gene, "_raster.png")),
+      file.path(dir_raster, paste0(gene, "_raster.png")),
       p_raster,
       width = 11,
       height = 5.5,
@@ -556,7 +576,7 @@ for (gene in genes_of_interest) {
     )
     
     ggsave(
-      file.path(cfg$outdir, paste0(gene, "_correlation.png")),
+      file.path(dir_correlation, paste0(gene, "_correlation.png")),
       p_cor,
       width = 10,
       height = 5,
@@ -568,7 +588,7 @@ for (gene in genes_of_interest) {
   p_lr <- linearRegression(input = ss, gene = gene)
   
   ggsave(
-    file.path(cfg$outdir, paste0(gene, "_linearRegression.png")),
+    file.path(dir_linear, paste0(gene, "_linearRegression.png")),
     p_lr,
     width = 10,
     height = 5,
@@ -579,7 +599,7 @@ for (gene in genes_of_interest) {
   p_pc <- pixelClass(input = ss, gene = gene)
   
   ggsave(
-    file.path(cfg$outdir, paste0(gene, "_pixelClass.png")),
+    file.path(dir_pixel, paste0(gene, "_pixelClass.png")),
     p_pc,
     width = 10,
     height = 5,
