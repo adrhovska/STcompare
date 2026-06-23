@@ -14,7 +14,7 @@ path_counts2 <- "/Users/adrhovska/Desktop/STdata/Native_2_ST/filtered_feature_bc
 path_pos1_aligned <- "/Users/adrhovska/Desktop/STdata/Aligned_Native_1_2/Native_1_aligned_to_Native_2_WITH_BARCODES.csv"
 path_pos2_spatial_dir <- "/Users/adrhovska/Desktop/STdata/Native_2_ST/spatial"
 
-# Check for presence of Gene expression object 
+# Check for presence of Gene expression objects 
 get_gene_expression <- function(counts) {
   if (is.list(counts)) {
     if ("Gene Expression" %in% names(counts)) {
@@ -200,7 +200,7 @@ coords1 <- matched1$coords
 counts2_matched <- matched2$counts
 coords2 <- matched2$coords
 
-
+# Gene selection
 epithelial_genes      <- c("KRT4", "KRT5", "IVL")
 smooth_muscle_genes   <- c("SMTN", "CALD1", "CSRP1", "TAGLN")
 skeletal_muscle_genes <- c("TNNC1", "TNNC2", "ACTC1", "MYH8")
@@ -217,7 +217,7 @@ genes_of_interest <- genes_of_interest[
 ]
 
 if (length(genes_of_interest) == 0) {
-  stop("None of the genes of interest are present in both count matrices.")
+  stop("None of the genes of interest are present in count matrices")
 }
 
 cat("\nGenes used:\n")
@@ -226,7 +226,7 @@ print(genes_of_interest)
 counts1_matched <- counts1_matched[genes_of_interest, , drop = FALSE]
 counts2_matched <- counts2_matched[genes_of_interest, , drop = FALSE]
 
-
+# Build SpatialExperiment objects 
 spe1 <- SpatialExperiment(
   assays = list(counts = counts1_matched),
   spatialCoords = coords1
@@ -249,30 +249,22 @@ df_coords <- rbind(
     sample = "Native_2_scaled"
   )
 )
-
+# Check plot for overlap
 print(
   ggplot(df_coords, aes(x = x, y = y, colour = sample)) +
     geom_point(size = 0.4, alpha = 0.5) +
     coord_fixed() +
     theme_minimal() +
-    labs(title = "Coordinate overlap check")
+    labs(title = "Overlap check")
 )
 
+# Rasterisation
 rastList <- SEraster::rasterizeGeneExpression(
   list(Native_1 = spe1, Native_2 = spe2),
   assay_name = "counts",
   resolution = 150,
   square = FALSE
 )
-
-all_x <- c(coords1[, "x"], coords2[, "x"])
-all_y <- c(coords1[, "y"], coords2[, "y"])
-
-x_pad <- diff(range(all_x)) * 0.05
-y_pad <- diff(range(all_y)) * 0.05
-
-shared_xlim <- range(all_x) + c(-x_pad, x_pad)
-shared_ylim <- range(all_y) + c(-y_pad, y_pad)
 
 sc <- spatialCorrelationGeneExp(
   list(Native_1 = rastList$Native_1, Native_2 = rastList$Native_2),
@@ -308,98 +300,150 @@ results$cell_type <- ifelse(
 
 print(results)
 
-# Plots 
-for (gene in genes_of_interest) {
-  p1 <- plotRaster(
-    rastList$Native_1,
-    feature_name = gene,
-    plotTitle = paste("Native_1 aligned -", gene)
-  )
-  
-  p2 <- plotRaster(
-    rastList$Native_2,
-    feature_name = gene,
-    plotTitle = paste("Native_2 scaled -", gene)
-  )
-  
-  print(p1 + p2)
-}
-
-
-for (gene in genes_of_interest) {
-  print(plotCorrelationGeneExp(
-    list(Native_1 = rastList$Native_1, Native_2 = rastList$Native_2),
-    sc,
-    gene
-  ))
-}
-
-
+# Save results table and plots
 plot_dir <- "/Users/adrhovska/Desktop/STdata/STcompare_plots"
 dir.create(plot_dir, showWarnings = FALSE, recursive = TRUE)
 
+write.csv(
+  results,
+  file = file.path(plot_dir, "STcompare_results.csv"),
+  row.names = TRUE
+)
 
-for (gene in genes_of_interest) {
+assays1 <- SummarizedExperiment::assayNames(rastList$Native_1)
+assays2 <- SummarizedExperiment::assayNames(rastList$Native_2)
+
+common_assays <- intersect(assays1, assays2)
+
+if (length(common_assays) == 0) {
+  stop("No shared assay names")
+}
+
+rast_assay <- if ("counts" %in% common_assays) {
+  "counts"
+} else {
+  common_assays[1]
+}
+
+# Shared x/y coordinates 
+
+all_x <- c(coords1[, "x"], coords2[, "x"])
+all_y <- c(coords1[, "y"], coords2[, "y"])
+
+all_x <- all_x[is.finite(all_x)]
+all_y <- all_y[is.finite(all_y)]
+
+raster_resolution <- 150
+padding_multiplier <- 2
+
+x_pad <- raster_resolution * padding_multiplier
+y_pad <- raster_resolution * padding_multiplier
+
+shared_xlim <- c(
+  min(all_x) - x_pad,
+  max(all_x) + x_pad
+)
+
+shared_ylim <- c(
+  min(all_y) - y_pad,
+  max(all_y) + y_pad
+)
+
+# Shared colour limits per gene
+shared_gene_limits <- function(rastList, gene, assay_name) {
   
-  p1 <- plotRaster(
+  vals1 <- as.numeric(
+    SummarizedExperiment::assay(rastList$Native_1, assay_name)[gene, ]
+  )
+  
+  vals2 <- as.numeric(
+    SummarizedExperiment::assay(rastList$Native_2, assay_name)[gene, ]
+  )
+  
+  vals <- c(vals1, vals2)
+  vals <- vals[is.finite(vals)]
+  
+  if (length(vals) == 0) {
+    stop(paste0("No finite raster values found for gene ", gene))
+  }
+  
+  limits <- range(vals, na.rm = TRUE)
+  
+  if (limits[1] == limits[2]) {
+    limits <- limits + c(-0.5, 0.5)
+  }
+  
+  limits
+}
+
+make_raster_pair <- function(gene) {
+  
+  gene_limits <- shared_gene_limits(
+    rastList = rastList,
+    gene = gene,
+    assay_name = rast_assay
+  )
+  
+  p1 <- SEraster::plotRaster(
     rastList$Native_1,
+    assay_name = rast_assay,
     feature_name = gene,
     plotTitle = paste("Native_1 aligned -", gene)
-  )
+  ) +
+    ggplot2::scale_fill_viridis_c(
+      limits = gene_limits,
+      oob = scales::squish,
+      name = paste0(gene, "\nexpression")
+    ) +
+    ggplot2::coord_sf(
+      xlim = shared_xlim,
+      ylim = shared_ylim,
+      expand = FALSE,
+      clip = "off"
+    ) +
+    ggplot2::theme(
+      plot.margin = ggplot2::margin(10, 10, 10, 10)
+    )
   
-  p2 <- plotRaster(
+  p2 <- SEraster::plotRaster(
     rastList$Native_2,
+    assay_name = rast_assay,
     feature_name = gene,
     plotTitle = paste("Native_2 scaled -", gene)
-  )
+  ) +
+    ggplot2::scale_fill_viridis_c(
+      limits = gene_limits,
+      oob = scales::squish,
+      name = paste0(gene, "\nexpression")
+    ) +
+    ggplot2::coord_sf(
+      xlim = shared_xlim,
+      ylim = shared_ylim,
+      expand = FALSE,
+      clip = "off"
+    ) +
+    ggplot2::theme(
+      plot.margin = ggplot2::margin(10, 10, 10, 10)
+    )
   
-  p <- p1 + p2
+  p1 + p2 +
+    patchwork::plot_layout(guides = "collect") &
+    ggplot2::theme(legend.position = "right")
+}
+
+# Save raster plots
+for (gene in genes_of_interest) {
   
-  ggsave(
+  message("Saving raster plot: ", gene)
+  
+  p <- make_raster_pair(gene)
+  
+  ggplot2::ggsave(
     filename = file.path(plot_dir, paste0(gene, "_raster.png")),
     plot = p,
-    width = 10,
-    height = 5,
-    dpi = 300
-  )
-}
-
-for (gene in genes_of_interest) {
-  
-  p <- plotCorrelationGeneExp(
-    list(Native_1 = rastList$Native_1, Native_2 = rastList$Native_2),
-    sc,
-    gene
-  )
-  
-  ggsave(
-    filename = file.path(plot_dir, paste0(gene, "_correlation.png")),
-    plot = p,
-    width = 10,
-    height = 5,
-    dpi = 300
-  )
-}
-
-for (gene in genes_of_interest) {
-  
-  p_lr <- linearRegression(input = ss, gene = gene)
-  
-  ggsave(
-    filename = file.path(plot_dir, paste0(gene, "_linearRegression.png")),
-    plot = p_lr,
-    width = 10,
-    height = 5,
-    dpi = 300
-  )
-  
-  p_pc <- pixelClass(input = ss, gene = gene)
-  
-  ggsave(
-    filename = file.path(plot_dir, paste0(gene, "_pixelClass.png")),
-    plot = p_pc,
-    width = 10,
-    height = 5,
-    dpi = 300
+    width = 11,
+    height = 5.5,
+    dpi = 300,
+    bg = "white"
   )
 }
