@@ -22,8 +22,8 @@ parse_args <- function(args) {
     scale   = "hires",
     res     = 150,
     threads = 4,
-    sample1 = "Sample_1",
-    sample2 = "Sample_2"
+    sample_aligned = "Sample_1",
+    sample_reference = "Sample_2"
   )
 
   i <- 1
@@ -60,8 +60,8 @@ parse_args <- function(args) {
 
 cfg <- parse_args(args)
 
-sample1_name <- cfg$sample1
-sample2_name <- cfg$sample2
+sample_aligned_name <- cfg$sample_aligned
+sample_reference_name <- cfg$sample_reference
 
 cat("counts1  :", cfg$counts1,  "\n")
 cat("counts2  :", cfg$counts2,  "\n")
@@ -71,8 +71,8 @@ cat("outdir   :", cfg$outdir,   "\n")
 cat("scale    :", cfg$scale,    "\n")
 cat("res      :", cfg$res,      "\n")
 cat("threads  :", cfg$threads,  "\n\n")
-cat("sample1  :", cfg$sample1,  "\n")
-cat("sample2  :", cfg$sample2,  "\n")
+cat("sample_aligned  :", cfg$sample_aligned,  "\n")
+cat("sample_reference  :", cfg$sample_reference,  "\n")
 
 dir.create(cfg$outdir, showWarnings = FALSE, recursive = TRUE)
 
@@ -177,10 +177,10 @@ read_visium_positions <- function(
 }
 
 # Coord check
-check_coordinate_system <- function(coords1, coords2, sample1_name, sample2_name) {
+check_coordinate_system <- function(coords1, coords2, sample_aligned_name, sample_reference_name) {
   
   ranges <- data.frame(
-    sample = c(sample1_name, sample2_name),
+    sample = c(sample_aligned_name, sample_reference_name),
     min_x = c(min(coords1[, "x"]), min(coords2[, "x"])),
     max_x = c(max(coords1[, "x"]), max(coords2[, "x"])),
     min_y = c(min(coords1[, "y"]), min(coords2[, "y"])),
@@ -252,24 +252,24 @@ cat("Native 2 dims:", dim(counts2), "\n")
 
 pos1 <- read_aligned_positions(
   path = cfg$pos1,
-  sample_name = sample1_name
+  sample_name = sample_aligned_name
 )
 
 pos2 <- read_visium_positions(
   spatial_dir = cfg$spatial2,
   scale_type = cfg$scale,
-  sample_name = sample2_name
+  sample_name = sample_reference_name
 )
 
 check_coordinate_system(
   coords1 = pos1,
   coords2 = pos2,
-  sample1_name = sample1_name,
-  sample2_name = sample2_name
+  sample_aligned_name = sample_aligned_name,
+  sample_reference_name = sample_reference_name
 )
 
-matched1 <- match_counts_to_positions(counts1, pos1, sample1_name)
-matched2 <- match_counts_to_positions(counts2, pos2, sample2_name)
+matched1 <- match_counts_to_positions(counts1, pos1, sample_aligned_name)
+matched2 <- match_counts_to_positions(counts2, pos2, sample_reference_name)
 
 counts1_matched <- matched1$counts
 coords1         <- matched1$coords
@@ -294,12 +294,12 @@ df_coords <- rbind(
   data.frame(
     x = coords1[, "x"],
     y = coords1[, "y"],
-    sample = sample1_name
+    sample = sample_aligned_name
   ),
   data.frame(
     x = coords2[, "x"],
     y = coords2[, "y"],
-    sample = sample2_name
+    sample = sample_reference_name
   )
 )
 
@@ -335,7 +335,7 @@ spe2 <- SpatialExperiment(
 
 spe_list <- setNames(
   list(spe1, spe2),
-  c(sample1_name, sample2_name)
+  c(sample_aligned_name, sample_reference_name)
 )
 
 # Rasterization
@@ -347,8 +347,8 @@ rastList <- SEraster::rasterizeGeneExpression(
 )
 
 rast_compare_list <- setNames(
-  list(rastList[[sample1_name]], rastList[[sample2_name]]),
-  c(sample1_name, sample2_name)
+  list(rastList[[sample_aligned_name]], rastList[[sample_reference_name]]),
+  c(sample_aligned_name, sample_reference_name)
 )
 
 # STcompare
@@ -394,8 +394,8 @@ write.csv(
 )
 
 # Identify raster assay name
-assays1 <- SummarizedExperiment::assayNames(rastList[[sample1_name]])
-assays2 <- SummarizedExperiment::assayNames(rastList[[sample2_name]])
+assays1 <- SummarizedExperiment::assayNames(rastList[[sample_aligned_name]])
+assays2 <- SummarizedExperiment::assayNames(rastList[[sample_reference_name]])
 
 common_assays <- intersect(assays1, assays2)
 
@@ -443,14 +443,14 @@ get_shared_gene_limits <- function(rastList, gene, assay_name) {
   
   vals1 <- as.numeric(
     SummarizedExperiment::assay(
-      rastList[[sample1_name]],
+      rastList[[sample_aligned_name]],
       assay_name
     )[gene, ]
   )
   
   vals2 <- as.numeric(
     SummarizedExperiment::assay(
-      rastList[[sample2_name]],
+      rastList[[sample_reference_name]],
       assay_name
     )[gene, ]
   )
@@ -480,10 +480,10 @@ make_raster_pair <- function(gene) {
   )
   
   p1 <- SEraster::plotRaster(
-    rastList[[sample1_name]],
+    rastList[[sample_aligned_name]],
     assay_name = rast_assay,
     feature_name = gene,
-    plotTitle = paste(sample1_name, "-", gene)
+    plotTitle = paste(sample_aligned_name, "-", gene)
   ) +
     ggplot2::scale_fill_viridis_c(
       limits = gene_limits,
