@@ -106,8 +106,7 @@ output_dirs <- c(
   dir_pixel
 )
 
-invisible(lapply(output_dirs, dir.create,
-                 showWarnings = FALSE, recursive = TRUE))
+invisible(lapply(output_dirs, dir.create, showWarnings = FALSE, recursive = TRUE))
 
 epithelial_genes      <- c("KRT4", "KRT5", "IVL")
 smooth_muscle_genes   <- c("SMTN", "CALD1", "CSRP1", "TAGLN")
