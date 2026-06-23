@@ -76,12 +76,26 @@ cat("sample_reference  :", cfg$sample_reference,  "\n")
 
 dir.create(cfg$outdir, showWarnings = FALSE, recursive = TRUE)
 
-dir_results <- file.path(cfg$outdir, "00_results")
-dir_qc <- file.path(cfg$outdir, "01_coordinate_qc")
-dir_raster <- file.path(cfg$outdir, "02_raster_plots")
-dir_correlation <- file.path(cfg$outdir, "03_correlation_plots")
-dir_linear <- file.path(cfg$outdir, "04_linear_regression")
-dir_pixel <- file.path(cfg$outdir, "05_pixel_class")
+comparison_name <- paste0(
+  sample_aligned_name,
+  "_vs_",
+  sample_reference_name,
+  "_",
+  cfg$scale,
+  "_res",
+  cfg$res
+)
+
+dir_comparison <- file.path(cfg$outdir, comparison_name)
+
+dir.create(dir_comparison, showWarnings = FALSE, recursive = TRUE)
+
+dir_results <- file.path(dir_comparison, "00_results")
+dir_qc <- file.path(dir_comparison, "01_coordinate_qc")
+dir_raster <- file.path(dir_comparison, "02_raster_plots")
+dir_correlation <- file.path(dir_comparison, "03_correlation_plots")
+dir_linear <- file.path(dir_comparison, "04_linear_regression")
+dir_pixel <- file.path(dir_comparison, "05_pixel_class")
 
 output_dirs <- c(
   dir_results,
