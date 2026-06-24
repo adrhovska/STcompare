@@ -72,7 +72,9 @@ epithelial_genes <- c("KRT4", "KRT5", "IVL")
 smooth_muscle_genes <- c("SMTN", "CALD1", "CSRP1", "TAGLN")
 skeletal_muscle_genes <- c("TNNC1", "TNNC2", "ACTC1", "MYH8")
 
-genes_of_interest <- c(epithelial_genes, smooth_muscle_genes, skeletal_muscle_genes)
+genes_of_interest <- list(epithelial_genes = (c("KRT4", "KRT5", "IVL")),
+                          smooth_muscle_genes = (c("SMTN", "CALD1", "CSRP1", "TAGLN")),
+                          skeletal_muscle_genes = (c("TNNC1", "TNNC2", "ACTC1", "MYH8"))) # Have to change downstream
 
 get_gene_expression <- function(counts) {
   if (!is.list(counts)) {
