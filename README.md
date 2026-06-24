@@ -22,3 +22,5 @@ optional arguments include: outdir (saving outputs), sample_aligned (name of ali
 
 ## Outputs
 Outputs are saved in a directory named after the two samples with subdirectories for results with correlation coefficients and p-values per gene tested, overlap of coordinates to check for scaling and correct alignment, raster graphs, correlation graphs (scatter of matched pixel expression values), regression graphs, and spatial map with color scheme based on predominant expression of a gene in sample above treshold (treshold is mean gene expression in the sample)
+
+yyy
