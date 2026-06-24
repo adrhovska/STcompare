@@ -12,6 +12,8 @@ suppressPackageStartupMessages({
 # Extracting from command line arguments and parsing them
 args <- commandArgs(trailingOnly = TRUE)
 
+# comment
+
 parse_args <- function(args) {
   defaults <- list(
     counts1 = NULL,
