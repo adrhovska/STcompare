@@ -7,7 +7,31 @@ suppressPackageStartupMessages({
   library(patchwork)
   library(ggplot2)
   library(jsonlite)
+  library(argparser, quietly = TRUE)
 })
+
+## Parse command line arguments with argparser 
+p <- arg_parser("STcompare")
+# Adding command line arguments
+p <- add_argument(p, "--counts1", help = "Path to the aligned sample counts file")
+p <- add_argument(p, "--counts2", help = "Path to the reference sample counts file")
+p <- add_argument(p, "--pos1", help = "Path to the aligned positions file")
+p <- add_argument(p, "--spatial2", help = "Path to the reference spatial directory")
+p <- add_argument(p, "--outdir", help = "Output directory", default = "./STcompare_out")
+p <- add_argument(p, "--scale", help = "Scale type: highres | lowres", default = "hires")
+p <- add_argument(p, "--res",     help = "Raster resolution", default = 150L, type = "integer")
+p <- add_argument(p, "--threads", help = "Number of threads", default = 4L,   type = "integer")
+p <- add_argument(p, "--sample_aligned", help = "Name of the aligned sample", default = "Sample_1")
+p <- add_argument(p, "--sample_reference", help = "Name of the reference sample", default = "Sample_2")
+# Parsing command line arguments
+argv <- parse_args(p)
+# Validating arguments
+required <- c("counts1", "counts2", "pos1", "spatial2")
+missing <- required[sapply(required, function(k) is.na(argv[[k]]))]
+if (length(missing) > 0) {
+  print(paste0("ERROR: Missing required argument(s): ", paste0("--", missing, collapse = ", ")))
+  quit(status = 1)
+}
 
 # Extracting from command line arguments and parsing them
 args <- commandArgs(trailingOnly = TRUE)
@@ -36,7 +60,6 @@ parse_args <- function(args) {
   defaults$res <- as.integer(defaults$res)
   defaults$threads <- as.integer(defaults$threads)
 
-
   required <- c("counts1", "counts2", "pos1", "spatial2")
   missing <- required[sapply(required, function(k) is.null(defaults[[k]]))]
   if (length(missing)) {
@@ -54,11 +77,11 @@ parse_args <- function(args) {
     quit(status = 1)
   }
 
-  defaults
+  return(defaults)
 }
 
 cfg <- parse_args(args)
-
+-----
 sample_aligned_name <- cfg$sample_aligned
 sample_reference_name <- cfg$sample_reference
 
