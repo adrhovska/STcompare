@@ -72,7 +72,7 @@ genes_of_interest <- list(epithelial_genes = (c("KRT4", "KRT5", "IVL")),
                           smooth_muscle_genes = (c("SMTN", "CALD1", "CSRP1", "TAGLN")),
                           skeletal_muscle_genes = (c("TNNC1", "TNNC2", "ACTC1", "MYH8"))) # Have to change downstream
 
-# Function to extract gene expression counts from Seurat object or list
+# f: extracting gene expression counts from Seurat object or list --> not sure if counts has one or more and if it doesnt then you do not need the rest
 get_gene_expression <- function(counts) {
   if (!is.list(counts)) {
     return(counts)
@@ -84,67 +84,32 @@ get_gene_expression <- function(counts) {
   return(counts[[1]])
 }
 
-read_aligned_positions <- function(path, sample_name = "sample") {
-  
-  pos <- read.csv(
-    path,
-    header = TRUE,
-    check.names = FALSE,
-    stringsAsFactors = FALSE
-  )
-  
+# f: extracting coordinates
+read_aligned_positions <- function(path) {
+  pos <- read.csv(path, header = TRUE, check.names = FALSE, stringsAsFactors = FALSE)
   required_cols <- c("barcode", "x", "y")
-  
   if (!all(required_cols %in% colnames(pos))) {
-    stop(paste0(
-      sample_name,
-      " aligned file missing expected columns: ",
-      paste(required_cols, collapse = ", ")
-    ))
+    stop(paste0(sample_name, " aligned file missing expected columns: ", paste(required_cols, collapse = ", ")))
   }
-  
-  coord <- data.frame(
-    x = as.numeric(pos$x),
-    y = as.numeric(pos$y),
-    row.names = pos$barcode
-  )
-  
+  coord <- data.frame(x = as.numeric(pos$x), y = as.numeric(pos$y), row.names = pos$barcode)
   if (any(!is.finite(coord$x)) || any(!is.finite(coord$y))) {
-    stop(paste0(sample_name, " aligned coordinates contain non-finite values."))
+      stop(paste0(sample_name, " aligned coordinates contain non-finite values."))
   }
-  
-  coord
+  return(coord)
 }
 
-read_visium_positions <- function(
-  spatial_dir,
-  scale_type = "hires",
-  sample_name = "sample"
-) {
-  
+# f: reading coordinates of the reference sample --> add more description to each of the functions here andtake a look at how to do such 
+read_visium_positions <- function(spatial_dir, scale_type = "hires") {
   pos_path <- file.path(spatial_dir, "tissue_positions.csv")
   scale_path <- file.path(spatial_dir, "scalefactors_json.json")
-  
-  pos <- read.csv(
-    pos_path,
-    header = TRUE,
-    row.names = 1,
-    check.names = FALSE,
-    stringsAsFactors = FALSE
-  )
-  
+  pos <- read.csv(pos_path, header = TRUE, row.names = 1, check.names = FALSE, stringsAsFactors = FALSE)
   required_cols <- c("pxl_row_in_fullres", "pxl_col_in_fullres")
-  
   if (!all(required_cols %in% colnames(pos))) {
-    stop(paste0(
-      sample_name,
-      " tissue_positions.csv missing expected columns: ",
-      paste(required_cols, collapse = ", ")
-    ))
+    stop(paste0(sample_name, " tissue_positions.csv missing expected columns: ", paste(required_cols, collapse = ", ")))
   }
   
-  scales <- jsonlite::fromJSON(scale_path)
-  
+  # Scaling of the coordinate values 
+  scales <- fromJSON(scale_path)
   if (scale_type == "hires") {
     scale_factor <- scales$tissue_hires_scalef
   } else if (scale_type == "lowres") {
@@ -153,8 +118,8 @@ read_visium_positions <- function(
     stop("scale_type must be either 'hires' or 'lowres'.")
   }
   
-  cat(sample_name, scale_type, "scale factor:", scale_factor, "\n")
-  
+  print(paste0((sample_name, scale_type, "scale factor:", scale_factor))
+
   pos_scaled <- data.frame(
     x = as.numeric(pos$pxl_col_in_fullres) * scale_factor,
     y = as.numeric(pos$pxl_row_in_fullres) * scale_factor,
@@ -164,8 +129,7 @@ read_visium_positions <- function(
   if (any(!is.finite(pos_scaled$x)) || any(!is.finite(pos_scaled$y))) {
     stop(paste0(sample_name, " scaled coordinates contain non-finite values."))
   }
-  
-  pos_scaled
+  return(pos_scaled)
 }
 
 # Coord check
@@ -207,8 +171,6 @@ check_coordinate_system <- function(coords1, coords2, sample_aligned_name, sampl
       "Coordinate ranges differ in scale, one sample may be fullres while the other is hires/lowres."
     )
   }
-  
-  invisible(NULL)
 }
 
 match_counts_to_positions <- function(counts, pos, sample_name) {
@@ -447,7 +409,7 @@ get_shared_gene_limits <- function(rastList, gene, assay_name, name1, name2) {
     limits <- limits + c(-0.5, 0.5)
   }
   
-  limits
+  return(limits)
 }
 
 make_single_raster <- function(rast, name, gene, gene_limits,
