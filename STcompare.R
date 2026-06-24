@@ -16,11 +16,11 @@ parse_args <- function(args) {
   defaults <- list(
     counts1 = NULL,
     counts2 = NULL,
-    pos1    = NULL,
+    pos1 = NULL,
     spatial2 = NULL,
-    outdir  = "./STcompare_out",
-    scale   = "hires",
-    res     = 150,
+    outdir = "./STcompare_out",
+    scale = "hires",
+    res = 150,
     threads = 4,
     sample_aligned = "Sample_1",
     sample_reference = "Sample_2"
@@ -34,12 +34,12 @@ parse_args <- function(args) {
     i <- i + 2
   }
 
-  defaults$res     <- as.integer(defaults$res)
+  defaults$res <- as.integer(defaults$res)
   defaults$threads <- as.integer(defaults$threads)
 
 
   required <- c("counts1", "counts2", "pos1", "spatial2")
-  missing  <- required[sapply(required, function(k) is.null(defaults[[k]]))]
+  missing <- required[sapply(required, function(k) is.null(defaults[[k]]))]
   if (length(missing)) {
     cat("ERROR: Missing required argument(s):", paste0("--", missing, collapse = ", "), "\n\n")
     cat("USAGE:\n")
@@ -63,16 +63,16 @@ cfg <- parse_args(args)
 sample_aligned_name <- cfg$sample_aligned
 sample_reference_name <- cfg$sample_reference
 
-cat("counts1  :", cfg$counts1,  "\n")
-cat("counts2  :", cfg$counts2,  "\n")
-cat("pos1     :", cfg$pos1,     "\n")
-cat("spatial2 :", cfg$spatial2, "\n")
-cat("outdir   :", cfg$outdir,   "\n")
-cat("scale    :", cfg$scale,    "\n")
-cat("res      :", cfg$res,      "\n")
-cat("threads  :", cfg$threads,  "\n\n")
-cat("sample_aligned  :", cfg$sample_aligned,  "\n")
-cat("sample_reference  :", cfg$sample_reference,  "\n")
+cat("counts1           :", cfg$counts1, "\n")
+cat("counts2           :", cfg$counts2, "\n")
+cat("pos1              :", cfg$pos1, "\n")
+cat("spatial2          :", cfg$spatial2, "\n")
+cat("outdir            :", cfg$outdir, "\n")
+cat("scale             :", cfg$scale, "\n")
+cat("res               :", cfg$res, "\n")
+cat("threads           :", cfg$threads, "\n\n")
+cat("sample_aligned    :", cfg$sample_aligned, "\n")
+cat("sample_reference  :", cfg$sample_reference, "\n")
 
 dir.create(cfg$outdir, showWarnings = FALSE, recursive = TRUE)
 
@@ -106,10 +106,12 @@ output_dirs <- c(
   dir_pixel
 )
 
-invisible(lapply(output_dirs, dir.create, showWarnings = FALSE, recursive = TRUE))
+for (d in output_dirs) {
+  dir.create(d, showWarnings = FALSE, recursive = TRUE)
+}
 
-epithelial_genes      <- c("KRT4", "KRT5", "IVL")
-smooth_muscle_genes   <- c("SMTN", "CALD1", "CSRP1", "TAGLN")
+epithelial_genes <- c("KRT4", "KRT5", "IVL")
+smooth_muscle_genes <- c("SMTN", "CALD1", "CSRP1", "TAGLN")
 skeletal_muscle_genes <- c("TNNC1", "TNNC2", "ACTC1", "MYH8")
 
 genes_of_interest <- c(epithelial_genes, smooth_muscle_genes, skeletal_muscle_genes)
@@ -256,17 +258,17 @@ match_counts_to_positions <- function(counts, pos, sample_name) {
   cat(sample_name, "exact barcode matches:", length(exact_common), "\n")
   if (length(exact_common) > 0) {
     counts_m <- counts[, exact_common, drop = FALSE]
-    pos_m    <- pos[exact_common, , drop = FALSE]
+    pos_m <- pos[exact_common, , drop = FALSE]
   } else {
     count_key <- sub("-1$", "", colnames(counts))
-    pos_key   <- sub("-1$", "", rownames(pos))
+    pos_key <- sub("-1$", "", rownames(pos))
     common_key <- intersect(count_key, pos_key)
     cat(sample_name, "cleaned barcode matches:", length(common_key), "\n")
     if (length(common_key) == 0) stop(paste0("No matching barcodes for ", sample_name))
     count_idx <- match(common_key, count_key)
-    pos_idx   <- match(common_key, pos_key)
-    counts_m  <- counts[, count_idx, drop = FALSE]
-    pos_m     <- pos[pos_idx, , drop = FALSE]
+    pos_idx <- match(common_key, pos_key)
+    counts_m <- counts[, count_idx, drop = FALSE]
+    pos_m <- pos[pos_idx, , drop = FALSE]
     rownames(pos_m) <- colnames(counts_m)
   }
   coords <- cbind(x = as.numeric(pos_m$x), y = as.numeric(pos_m$y))
@@ -304,9 +306,9 @@ matched1 <- match_counts_to_positions(counts1, pos1, sample_aligned_name)
 matched2 <- match_counts_to_positions(counts2, pos2, sample_reference_name)
 
 counts1_matched <- matched1$counts
-coords1         <- matched1$coords
+coords1 <- matched1$coords
 counts2_matched <- matched2$counts
-coords2         <- matched2$coords
+coords2 <- matched2$coords
 
 genes_of_interest <- genes_of_interest[
   genes_of_interest %in% rownames(counts1_matched) &
@@ -447,15 +449,15 @@ all_x <- all_x[is.finite(all_x)]
 all_y <- all_y[is.finite(all_y)]
 
 raster_resolution <- cfg$res
-raster_padding_multiplier <- 2
+pad_multiplier <- 2
 
-spatial_pad <- raster_resolution * raster_padding_multiplier
+spatial_pad <- raster_resolution * pad_multiplier
 
 shared_xlim <- c(min(all_x) - spatial_pad, max(all_x) + spatial_pad)
 shared_ylim <- c(min(all_y) - spatial_pad, max(all_y) + spatial_pad)
 
-spatial_unit_label <- paste0(cfg$scale, " image pixels")
-expression_unit_label <- "rasterised raw counts"
+coord_label <- paste0(cfg$scale, " image pixels")
+expr_label <- "rasterised raw counts"
 
 
 get_shared_gene_limits <- function(rastList, gene, assay_name, name1, name2) {
@@ -492,28 +494,28 @@ get_shared_gene_limits <- function(rastList, gene, assay_name, name1, name2) {
 
 make_single_raster <- function(rast, name, gene, gene_limits,
                                 rast_assay, shared_xlim, shared_ylim,
-                                spatial_unit_label,
-                                expression_unit_label) {
+                                coord_label,
+                                expr_label) {
   SEraster::plotRaster(
     rast,
-    assay_name  = rast_assay,
+    assay_name = rast_assay,
     feature_name = gene,
-    plotTitle   = paste(name, "-", gene)
+    plotTitle = paste(name, "-", gene)
   ) +
     ggplot2::scale_fill_viridis_c(
       limits = gene_limits,
-      oob    = scales::squish,
-      name   = paste0(gene, "\n", expression_unit_label)
+      oob = scales::squish,
+      name = paste0(gene, "\n", expr_label)
     ) +
     ggplot2::coord_sf(
-      xlim   = shared_xlim,
-      ylim   = shared_ylim,
+      xlim = shared_xlim,
+      ylim = shared_ylim,
       expand = FALSE,
-      clip   = "off"
+      clip = "off"
     ) +
     ggplot2::labs(
-      x = paste0("x coordinate (", spatial_unit_label, ")"),
-      y = paste0("y coordinate (", spatial_unit_label, ")")
+      x = paste0("x coordinate (", coord_label, ")"),
+      y = paste0("y coordinate (", coord_label, ")")
     ) +
     ggplot2::theme(plot.margin = ggplot2::margin(10, 10, 10, 10))
 }
@@ -521,8 +523,8 @@ make_single_raster <- function(rast, name, gene, gene_limits,
 make_raster_pair <- function(gene, rastList, rast_assay,
                               name1, name2,
                               shared_xlim, shared_ylim,
-                              spatial_unit_label,
-                              expression_unit_label) {
+                              coord_label,
+                              expr_label) {
   
   gene_limits <- get_shared_gene_limits(
     rastList = rastList,
@@ -533,27 +535,27 @@ make_raster_pair <- function(gene, rastList, rast_assay,
   )
   
   p1 <- make_single_raster(
-    rast                 = rastList[[name1]],
-    name                 = name1,
-    gene                 = gene,
-    gene_limits          = gene_limits,
-    rast_assay           = rast_assay,
-    shared_xlim          = shared_xlim,
-    shared_ylim          = shared_ylim,
-    spatial_unit_label   = spatial_unit_label,
-    expression_unit_label = expression_unit_label
+    rast = rastList[[name1]],
+    name = name1,
+    gene = gene,
+    gene_limits = gene_limits,
+    rast_assay = rast_assay,
+    shared_xlim = shared_xlim,
+    shared_ylim = shared_ylim,
+    coord_label = coord_label,
+    expr_label = expr_label
 )
 
 p2 <- make_single_raster(
-    rast                 = rastList[[name2]],
-    name                 = name2,
-    gene                 = gene,
-    gene_limits          = gene_limits,
-    rast_assay           = rast_assay,
-    shared_xlim          = shared_xlim,
-    shared_ylim          = shared_ylim,
-    spatial_unit_label   = spatial_unit_label,
-    expression_unit_label = expression_unit_label
+    rast = rastList[[name2]],
+    name = name2,
+    gene = gene,
+    gene_limits = gene_limits,
+    rast_assay = rast_assay,
+    shared_xlim = shared_xlim,
+    shared_ylim = shared_ylim,
+    coord_label = coord_label,
+    expr_label = expr_label
 )
   
   p1 + p2 +
@@ -566,15 +568,15 @@ for (gene in genes_of_interest) {
   if (gene %in% genes_in_sc) {
     
     p_raster <- make_raster_pair(
-      gene                 = gene,
-      rastList             = rastList,
-      rast_assay           = rast_assay,
-      name1                = sample_aligned_name,
-      name2                = sample_reference_name,
-      shared_xlim          = shared_xlim,
-      shared_ylim          = shared_ylim,
-     spatial_unit_label   = spatial_unit_label,
-      expression_unit_label = expression_unit_label
+      gene = gene,
+      rastList = rastList,
+      rast_assay = rast_assay,
+      name1 = sample_aligned_name,
+      name2 = sample_reference_name,
+      shared_xlim = shared_xlim,
+      shared_ylim = shared_ylim,
+      coord_label = coord_label,
+      expr_label = expr_label
 )
     
     ggsave(
