@@ -33,105 +33,41 @@ if (length(missing) > 0) {
   quit(status = 1)
 }
 
-# Extracting from command line arguments and parsing them
-args <- commandArgs(trailingOnly = TRUE)
-parse_args <- function(args) {
-  defaults <- list(
-    counts1 = NULL,
-    counts2 = NULL,
-    pos1 = NULL,
-    spatial2 = NULL,
-    outdir = "./STcompare_out",
-    scale = "hires",
-    res = 150,
-    threads = 4,
-    sample_aligned = "Sample_1",
-    sample_reference = "Sample_2"
-  )
+# Set names and print passed arguments
+sample_aligned_name <- argv$sample_aligned
+sample_reference_name <- argv$sample_reference
 
-  i <- 1
-  while (i <= length(args)) {
-    key <- sub("^--", "", args[i])
-    val <- if (i + 1 <= length(args)) args[i + 1] else stop(paste0("Missing value for --", key))
-    defaults[[key]] <- val
-    i <- i + 2
-  }
+print(paste0("counts1           :", argv$counts1))
+print(paste0("counts2           :", argv$counts2))
+print(paste0("pos1              :", argv$pos1))
+print(paste0("spatial2          :", argv$spatial2))
+print(paste0("outdir            :", argv$outdir))
+print(paste0("scale             :", argv$scale))
+print(paste0("res               :", argv$res))
+print(paste0("threads           :", argv$threads))
+print(paste0("sample_aligned    :", argv$sample_aligned))
+print(paste0("sample_reference  :", argv$sample_reference))
 
-  defaults$res <- as.integer(defaults$res)
-  defaults$threads <- as.integer(defaults$threads)
-
-  required <- c("counts1", "counts2", "pos1", "spatial2")
-  missing <- required[sapply(required, function(k) is.null(defaults[[k]]))]
-  if (length(missing)) {
-    cat("ERROR: Missing required argument(s):", paste0("--", missing, collapse = ", "), "\n\n")
-    cat("USAGE:\n")
-    cat("  Rscript STcompare_pipeline.R \\\n")
-    cat("    --counts1 \\\n")
-    cat("    --counts2 \\\n")
-    cat("    --pos1 \\\n")
-    cat("    --spatial2 \\\n")
-    cat("    [--outdir  ./STcompare_out] \\\n") # Those in [] mean that they are preset as a default value
-    cat("    [--scale   hires|lowres] \\\n")
-    cat("    [--res     150] \\\n")
-    cat("    [--threads 4]\n")
-    quit(status = 1)
-  }
-
-  return(defaults)
-}
-
-cfg <- parse_args(args)
------
-sample_aligned_name <- cfg$sample_aligned
-sample_reference_name <- cfg$sample_reference
-
-cat("counts1           :", cfg$counts1, "\n")
-cat("counts2           :", cfg$counts2, "\n")
-cat("pos1              :", cfg$pos1, "\n")
-cat("spatial2          :", cfg$spatial2, "\n")
-cat("outdir            :", cfg$outdir, "\n")
-cat("scale             :", cfg$scale, "\n")
-cat("res               :", cfg$res, "\n")
-cat("threads           :", cfg$threads, "\n\n")
-cat("sample_aligned    :", cfg$sample_aligned, "\n")
-cat("sample_reference  :", cfg$sample_reference, "\n")
-
-dir.create(cfg$outdir, showWarnings = FALSE, recursive = TRUE)
-
-comparison_name <- paste0(
-  sample_aligned_name,
-  "_vs_",
-  sample_reference_name,
-  "_",
-  cfg$scale,
-  "_res",
-  cfg$res
-)
-
-dir_comparison <- file.path(cfg$outdir, comparison_name)
-
+# Create output directories
+# 1. Create main output directory
+dir.create(argv$outdir, showWarnings = FALSE, recursive = TRUE)
+# 2. Create comparison-specific subdirectory
+comparison_name <- paste0(sample_aligned_name, "_vs_", sample_reference_name, "_", argv$scale, "_res", argv$res)
+dir_comparison <- file.path(argv$outdir, comparison_name)
 dir.create(dir_comparison, showWarnings = FALSE, recursive = TRUE)
-
-dir_results <- file.path(dir_comparison, "00_results")
-dir_qc <- file.path(dir_comparison, "01_coordinate_qc")
-dir_raster <- file.path(dir_comparison, "02_raster_plots")
-dir_correlation <- file.path(dir_comparison, "03_correlation_plots")
-dir_linear <- file.path(dir_comparison, "04_linear_regression")
-dir_pixel <- file.path(dir_comparison, "05_pixel_class")
-
-output_dirs <- c(
-  dir_results,
-  dir_qc,
-  dir_raster,
-  dir_correlation,
-  dir_linear,
-  dir_pixel
-)
-
+# 3. Create further subdirectories
+dir_results <- file.path(dir_comparison, "Results")
+dir_qc <- file.path(dir_comparison, "Coordinate_QC")
+dir_raster <- file.path(dir_comparison, "Raster_Plots")
+dir_correlation <- file.path(dir_comparison, "Correlation_Plots")
+dir_linear <- file.path(dir_comparison, "Linear_Regression")
+dir_pixel <- file.path(dir_comparison, "Pixel_Class")
+output_dirs <- c(dir_results, dir_qc, dir_raster, dir_correlation, dir_linear, dir_pixel)
 for (d in output_dirs) {
   dir.create(d, showWarnings = FALSE, recursive = TRUE)
 }
 
+# Define genes of interest
 epithelial_genes <- c("KRT4", "KRT5", "IVL")
 smooth_muscle_genes <- c("SMTN", "CALD1", "CSRP1", "TAGLN")
 skeletal_muscle_genes <- c("TNNC1", "TNNC2", "ACTC1", "MYH8")
