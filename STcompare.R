@@ -246,7 +246,7 @@ check_coordinate_system <- function(coords1, coords2, sample_aligned_name, sampl
   
   if (width_ratio > 3 || height_ratio > 3) {
     warning(
-      "Coordinate ranges differ strongly in scale, one sample may be fullres while the other is hires/lowres."
+      "Coordinate ranges differ in scale, one sample may be fullres while the other is hires/lowres."
     )
   }
   
