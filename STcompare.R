@@ -68,14 +68,11 @@ for (d in output_dirs) {
 }
 
 # Define genes of interest
-epithelial_genes <- c("KRT4", "KRT5", "IVL")
-smooth_muscle_genes <- c("SMTN", "CALD1", "CSRP1", "TAGLN")
-skeletal_muscle_genes <- c("TNNC1", "TNNC2", "ACTC1", "MYH8")
-
 genes_of_interest <- list(epithelial_genes = (c("KRT4", "KRT5", "IVL")),
                           smooth_muscle_genes = (c("SMTN", "CALD1", "CSRP1", "TAGLN")),
                           skeletal_muscle_genes = (c("TNNC1", "TNNC2", "ACTC1", "MYH8"))) # Have to change downstream
 
+# Function to extract gene expression counts from Seurat object or list
 get_gene_expression <- function(counts) {
   if (!is.list(counts)) {
     return(counts)
@@ -83,7 +80,8 @@ get_gene_expression <- function(counts) {
   if ("Gene Expression" %in% names(counts)) {
     return(counts[["Gene Expression"]])
   }
-  return (counts[[1]])
+  warning("No 'Gene Expression' assay found, used first element: ", names(counts)[1])
+  return(counts[[1]])
 }
 
 read_aligned_positions <- function(path, sample_name = "sample") {
