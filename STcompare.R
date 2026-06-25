@@ -74,38 +74,30 @@ genes_of_interest <- list(epithelial_genes = (c("KRT4", "KRT5", "IVL")),
                           skeletal_muscle_genes = (c("TNNC1", "TNNC2", "ACTC1", "MYH8"))) # Have to change downstream
 
 ## Reader of aligned positions and Visium positions
-# reads a CSV file containing aligned positions and returns a data frame with x and y coordinates
+# reads a CSV file containing aligned or Visium positions and returns a data frame with x and y coordinates
 # checks for required columns and ensures that the coordinates are numeric and finite
 # @path: path to the CSV file containing aligned positions
 # @sample_name: name of the sample for error messages
-
-read_aligned_positions <- function(path) {
-  pos <- read.csv(path, header = TRUE, check.names = FALSE, stringsAsFactors = FALSE)
-  required_cols <- c("barcode", "x", "y")
-  if (!all(required_cols %in% colnames(pos))) {
-    stop(paste0(sample_name, " aligned file missing expected columns: ", paste(required_cols, collapse = ", ")))
-  }
-  coord <- data.frame(x = as.numeric(pos$x), y = as.numeric(pos$y), row.names = pos$barcode)
-  if (any(!is.finite(coord$x)) || any(!is.finite(coord$y))) {
-      stop(paste0(sample_name, " aligned coordinates contain non-finite values."))
-  }
-  return(coord)
+# @type: type of positions ("aligned" or "visium")
+# @scale_type: scale type for Visium positions ("hires" or "lowres")
+read_positions <- function(path,sample_name, type = "visium", scale_type = "hires") {
+  if (type == "aligned") {
+    pos <- read.csv(path, header = TRUE, check.names = FALSE, stringsAsFactors = FALSE)
+    required_cols <- c("barcode", "x", "y")
+    if (!all(required_cols %in% colnames(pos))) {
+      stop(paste0(sample_name, " aligned file missing expected columns: ", paste(required_cols, collapse = ", ")))
+    }
+    coord <- data.frame(x = as.numeric(pos$x), y = as.numeric(pos$y), row.names = pos$barcode)
+  } else if (type == "visium") {
+    pos_path <- file.path(spatial_dir, "tissue_positions.csv")
+    scale_path <- file.path(spatial_dir, "scalefactors_json.json")
+    pos <- read.csv(pos_path, header = TRUE, row.names = 1, check.names = FALSE, stringsAsFactors = FALSE)
+    required_cols <- c("pxl_row_in_fullres", "pxl_col_in_fullres")
+    if (!all(required_cols %in% colnames(pos))) {
+      stop(paste0(sample_name, " tissue_positions.csv missing expected columns: ", paste(required_cols, collapse = ", ")))
+    }
 }
 
-## Reader of reference sample coordinates in high or low resolution based on scale_type argument 
-# checks for required columns
-# @spatial_dir: path to the spatial directory containing tissue_positions.csv and scalefactors_json.json
-# @scale_type: either "hires" or "lowres" to determine which scale 
-
-read_visium_positions <- function(spatial_dir, scale_type = "hires") {
-  pos_path <- file.path(spatial_dir, "tissue_positions.csv")
-  scale_path <- file.path(spatial_dir, "scalefactors_json.json")
-  pos <- read.csv(pos_path, header = TRUE, row.names = 1, check.names = FALSE, stringsAsFactors = FALSE)
-  required_cols <- c("pxl_row_in_fullres", "pxl_col_in_fullres")
-  if (!all(required_cols %in% colnames(pos))) {
-    stop(paste0(sample_name, " tissue_positions.csv missing expected columns: ", paste(required_cols, collapse = ", ")))
-  }
-  
 # scaling of the coordinate values and checking for non-finite values
   scales <- fromJSON(scale_path)
   if (scale_type == "hires") {
