@@ -1,3 +1,4 @@
+# load required libraries
 suppressPackageStartupMessages({
   library(STcompare)
   library(SpatialExperiment)
@@ -10,9 +11,9 @@ suppressPackageStartupMessages({
   library(argparser, quietly = TRUE)
 })
 
-## Parse command line arguments with argparser 
+## Parsing command line arguments with argparser 
 p <- arg_parser("STcompare")
-# Adding command line arguments
+# adding command line arguments
 p <- add_argument(p, "--counts1", help = "Path to the aligned sample counts file")
 p <- add_argument(p, "--counts2", help = "Path to the reference sample counts file")
 p <- add_argument(p, "--pos1", help = "Path to the aligned positions file")
@@ -23,9 +24,9 @@ p <- add_argument(p, "--res",     help = "Raster resolution", default = 150L, ty
 p <- add_argument(p, "--threads", help = "Number of threads", default = 4L,   type = "integer")
 p <- add_argument(p, "--sample_aligned", help = "Name of the aligned sample", default = "Sample_1")
 p <- add_argument(p, "--sample_reference", help = "Name of the reference sample", default = "Sample_2")
-# Parsing command line arguments
+# parsing command line arguments
 argv <- parse_args(p)
-# Validating arguments
+# validating arguments
 required <- c("counts1", "counts2", "pos1", "spatial2")
 missing <- required[sapply(required, function(k) is.na(argv[[k]]))]
 if (length(missing) > 0) {
@@ -33,7 +34,7 @@ if (length(missing) > 0) {
   quit(status = 1)
 }
 
-# Set names and print passed arguments
+# seting names and print passed arguments
 sample_aligned_name <- argv$sample_aligned
 sample_reference_name <- argv$sample_reference
 
@@ -48,14 +49,14 @@ print(paste0("threads           :", argv$threads))
 print(paste0("sample_aligned    :", argv$sample_aligned))
 print(paste0("sample_reference  :", argv$sample_reference))
 
-# Create output directories
-# 1. Create main output directory
+# creating output directories
+# 1. create main output directory
 dir.create(argv$outdir, showWarnings = FALSE, recursive = TRUE)
-# 2. Create comparison-specific subdirectory
+# 2. create comparison-specific subdirectory
 comparison_name <- paste0(sample_aligned_name, "_vs_", sample_reference_name, "_", argv$scale, "_res", argv$res)
 dir_comparison <- file.path(argv$outdir, comparison_name)
 dir.create(dir_comparison, showWarnings = FALSE, recursive = TRUE)
-# 3. Create further subdirectories
+# 3. create further subdirectories
 dir_results <- file.path(dir_comparison, "Results")
 dir_qc <- file.path(dir_comparison, "Coordinate_QC")
 dir_raster <- file.path(dir_comparison, "Raster_Plots")
@@ -67,24 +68,17 @@ for (d in output_dirs) {
   dir.create(d, showWarnings = FALSE, recursive = TRUE)
 }
 
-# Define genes of interest
+# defining genes of interest (from Supplementary material Extended Data Figure 8 b))
 genes_of_interest <- list(epithelial_genes = (c("KRT4", "KRT5", "IVL")),
                           smooth_muscle_genes = (c("SMTN", "CALD1", "CSRP1", "TAGLN")),
                           skeletal_muscle_genes = (c("TNNC1", "TNNC2", "ACTC1", "MYH8"))) # Have to change downstream
 
-# f: extracting gene expression counts from Seurat object or list --> not sure if counts has one or more and if it doesnt then you do not need the rest
-get_gene_expression <- function(counts) {
-  if (!is.list(counts)) {
-    return(counts)
-  }
-  if ("Gene Expression" %in% names(counts)) {
-    return(counts[["Gene Expression"]])
-  }
-  warning("No 'Gene Expression' assay found, used first element: ", names(counts)[1])
-  return(counts[[1]])
-}
+## Reader of aligned positions and Visium positions
+# reads a CSV file containing aligned positions and returns a data frame with x and y coordinates
+# checks for required columns and ensures that the coordinates are numeric and finite
+# @path: path to the CSV file containing aligned positions
+# @sample_name: name of the sample for error messages
 
-# f: extracting coordinates
 read_aligned_positions <- function(path) {
   pos <- read.csv(path, header = TRUE, check.names = FALSE, stringsAsFactors = FALSE)
   required_cols <- c("barcode", "x", "y")
@@ -98,7 +92,11 @@ read_aligned_positions <- function(path) {
   return(coord)
 }
 
-# f: reading coordinates of the reference sample --> add more description to each of the functions here andtake a look at how to do such 
+## Reader of reference sample coordinates in high or low resolution based on scale_type argument 
+# checks for required columns
+# @spatial_dir: path to the spatial directory containing tissue_positions.csv and scalefactors_json.json
+# @scale_type: either "hires" or "lowres" to determine which scale 
+
 read_visium_positions <- function(spatial_dir, scale_type = "hires") {
   pos_path <- file.path(spatial_dir, "tissue_positions.csv")
   scale_path <- file.path(spatial_dir, "scalefactors_json.json")
@@ -108,7 +106,7 @@ read_visium_positions <- function(spatial_dir, scale_type = "hires") {
     stop(paste0(sample_name, " tissue_positions.csv missing expected columns: ", paste(required_cols, collapse = ", ")))
   }
   
-  # Scaling of the coordinate values 
+# scaling of the coordinate values and checking for non-finite values
   scales <- fromJSON(scale_path)
   if (scale_type == "hires") {
     scale_factor <- scales$tissue_hires_scalef
@@ -117,42 +115,29 @@ read_visium_positions <- function(spatial_dir, scale_type = "hires") {
   } else {
     stop("scale_type must be either 'hires' or 'lowres'.")
   }
-  
-  print(paste0((sample_name, scale_type, "scale factor:", scale_factor))
-
+  print(paste0(sample_name, " ", scale_type, " scale factor:", scale_factor))
   pos_scaled <- data.frame(
     x = as.numeric(pos$pxl_col_in_fullres) * scale_factor,
     y = as.numeric(pos$pxl_row_in_fullres) * scale_factor,
     row.names = rownames(pos)
   )
-  
   if (any(!is.finite(pos_scaled$x)) || any(!is.finite(pos_scaled$y))) {
     stop(paste0(sample_name, " scaled coordinates contain non-finite values."))
   }
   return(pos_scaled)
 }
 
-# Coord check
+# checking of coordinate system (might be removed, here due to issues with STalign coordinates and printing warnings --> will retain until fix)
 check_coordinate_system <- function(coords1, coords2, sample_aligned_name, sample_reference_name) {
-  
-  ranges <- data.frame(
-    sample = c(sample_aligned_name, sample_reference_name),
-    min_x = c(min(coords1[, "x"]), min(coords2[, "x"])),
-    max_x = c(max(coords1[, "x"]), max(coords2[, "x"])),
-    min_y = c(min(coords1[, "y"]), min(coords2[, "y"])),
-    max_y = c(max(coords1[, "y"]), max(coords2[, "y"]))
-  )
+  ranges <- data.frame(sample = c(sample_aligned_name, sample_reference_name), min_x = c(min(coords1[, "x"]), min(coords2[, "x"])),
+                       max_x = c(max(coords1[, "x"]), max(coords2[, "x"])), min_y = c(min(coords1[, "y"]), min(coords2[, "y"])),
+                       max_y = c(max(coords1[, "y"]), max(coords2[, "y"])))
   
   ranges$width <- ranges$max_x - ranges$min_x
   ranges$height <- ranges$max_y - ranges$min_y
-  
-  print(ranges)
-  
+
   width_ratio <- max(ranges$width) / min(ranges$width)
   height_ratio <- max(ranges$height) / min(ranges$height)
-  
-  cat("Width ratio:", width_ratio, "\n")
-  cat("Height ratio:", height_ratio, "\n")
   
   x_overlap <- max(coords1[, "x"]) >= min(coords2[, "x"]) &&
     max(coords2[, "x"]) >= min(coords1[, "x"])
@@ -161,21 +146,24 @@ check_coordinate_system <- function(coords1, coords2, sample_aligned_name, sampl
     max(coords2[, "y"]) >= min(coords1[, "y"])
   
   if (!x_overlap || !y_overlap) {
-    warning(
-      "Coordinate ranges do not overlap, samples are not in the same aligned coordinate space."
-    )
+    print(paste0("Coordinate ranges do not overlap, samples are not in the same aligned coordinate space."))
   }
-  
   if (width_ratio > 3 || height_ratio > 3) {
-    warning(
-      "Coordinate ranges differ in scale, one sample may be fullres while the other is hires/lowres."
-    )
+    print(paste0("Coordinate ranges differ in scale, one sample may be fullres while the other is hires/lowres."))
   }
 }
 
+## Matcher of counts to positions
+# matches the barcodes in the counts matrix to the barcodes in the positions data frame
+# returns a list containing the matched counts matrix and the corresponding coordinates
+# -1 suffixes are removed from barcodes for matching if exact matches are not found
+# @counts: counts matrix with barcodes as column names
+# @pos: positions data frame with barcodes as row names
+# @sample_name: name of the sample for error messages
+
 match_counts_to_positions <- function(counts, pos, sample_name) {
   exact_common <- intersect(colnames(counts), rownames(pos))
-  cat(sample_name, "exact barcode matches:", length(exact_common), "\n")
+  print(paste0(sample_name, " exact barcode matches: ", length(exact_common)))
   if (length(exact_common) > 0) {
     counts_m <- counts[, exact_common, drop = FALSE]
     pos_m <- pos[exact_common, , drop = FALSE]
@@ -183,7 +171,7 @@ match_counts_to_positions <- function(counts, pos, sample_name) {
     count_key <- sub("-1$", "", colnames(counts))
     pos_key <- sub("-1$", "", rownames(pos))
     common_key <- intersect(count_key, pos_key)
-    cat(sample_name, "cleaned barcode matches:", length(common_key), "\n")
+    print(paste0(sample_name, " cleaned barcode matches: ", length(common_key)))
     if (length(common_key) == 0) stop(paste0("No matching barcodes for ", sample_name))
     count_idx <- match(common_key, count_key)
     pos_idx <- match(common_key, pos_key)
@@ -195,33 +183,16 @@ match_counts_to_positions <- function(counts, pos, sample_name) {
   rownames(coords) <- rownames(pos_m)
   if (ncol(counts_m) == 0 || nrow(coords) == 0) stop(paste0(sample_name, " has zero matched spots."))
   if (!all(is.finite(coords))) stop(paste0(sample_name, " has non-finite coordinates."))
-  cat(sample_name, "final matched spots:", ncol(counts_m), "\n")
+  print(paste0(sample_name, " final matched spots: ", ncol(counts_m)))
   list(counts = counts_m, coords = coords)
 }
 
-counts1 <- get_gene_expression(Read10X_h5(cfg$counts1))
-counts2 <- get_gene_expression(Read10X_h5(cfg$counts2))
-cat(sample_aligned_name, "dims:", dim(counts1), "\n")
-cat(sample_reference_name, "dims:", dim(counts2), "\n")
-
-pos1 <- read_aligned_positions(
-  path = cfg$pos1,
-  sample_name = sample_aligned_name
-)
-
-pos2 <- read_visium_positions(
-  spatial_dir = cfg$spatial2,
-  scale_type = cfg$scale,
-  sample_name = sample_reference_name
-)
-
-check_coordinate_system(
-  coords1 = pos1,
-  coords2 = pos2,
-  sample_aligned_name = sample_aligned_name,
-  sample_reference_name = sample_reference_name
-)
-
+# reading counts and positions, checking coordinate systems, and matching counts to positions using the defined functions
+counts1 <- Read10X_h5(arvg$counts1)
+counts2 <- Read10X_h5(arvg$counts2)
+pos1 <- read_aligned_positions(path = arvg$pos1, sample_name = sample_aligned_name)
+pos2 <- read_visium_positions(spatial_dir = arvg$spatial2, scale_type = arvg$scale, sample_name = sample_reference_name)
+check_coordinate_system(coords1 = pos1, coords2 = pos2, sample_aligned_name = sample_aligned_name, sample_reference_name = sample_reference_name)
 matched1 <- match_counts_to_positions(counts1, pos1, sample_aligned_name)
 matched2 <- match_counts_to_positions(counts2, pos2, sample_reference_name)
 
@@ -230,6 +201,7 @@ coords1 <- matched1$coords
 counts2_matched <- matched2$counts
 coords2 <- matched2$coords
 
+# filtering genes of interest to those present in both count matrices
 genes_of_interest <- genes_of_interest[
   genes_of_interest %in% rownames(counts1_matched) &
   genes_of_interest %in% rownames(counts2_matched)
@@ -296,14 +268,14 @@ spe_list <- setNames(
 rastList <- SEraster::rasterizeGeneExpression(
   spe_list,
   assay_name = "counts",
-  resolution = cfg$res,
+  resolution = arvg$res,
   square = FALSE
 )
 
 # STcompare
 sc <- spatialCorrelationGeneExp(
   rastList,
-  nThreads = cfg$threads
+  nThreads = arvg$threads
 )
 
 ss <- spatialSimilarity(
@@ -368,7 +340,7 @@ all_y <- c(coords1[, "y"], coords2[, "y"])
 all_x <- all_x[is.finite(all_x)]
 all_y <- all_y[is.finite(all_y)]
 
-raster_resolution <- cfg$res
+raster_resolution <- arvg$res
 pad_multiplier <- 2
 
 spatial_pad <- raster_resolution * pad_multiplier
@@ -376,7 +348,7 @@ spatial_pad <- raster_resolution * pad_multiplier
 shared_xlim <- c(min(all_x) - spatial_pad, max(all_x) + spatial_pad)
 shared_ylim <- c(min(all_y) - spatial_pad, max(all_y) + spatial_pad)
 
-coord_label <- paste0(cfg$scale, " image pixels")
+coord_label <- paste0(arvg$scale, " scale")
 expr_label <- "rasterised raw counts"
 
 
