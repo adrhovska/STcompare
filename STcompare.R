@@ -22,7 +22,7 @@ p <- add_argument(p, "--outdir", help = "Output directory", default = "./STcompa
 p <- add_argument(p, "--scale", help = "Scale type: highres | lowres", default = "hires")
 p <- add_argument(p, "--res",     help = "Raster resolution", default = 150L, type = "integer")
 p <- add_argument(p, "--threads", help = "Number of threads", default = 4L,   type = "integer")
-p <- add_argument(p, "--sample_aligned", help = "Name of the aligned sample", dsefault = "Sample_1")
+p <- add_argument(p, "--sample_aligned", help = "Name of the aligned sample", default = "Sample_1")
 p <- add_argument(p, "--sample_reference", help = "Name of the reference sample", default = "Sample_2")
 # parsing command line arguments
 argv <- parse_args(p)
@@ -69,9 +69,11 @@ for (d in output_dirs) {
 }
 
 # defining genes of interest (from Supplementary material Extended Data Figure 8 b))
+# and unlisting to then allow assignment of tissue type
 genes_of_interest <- list(epithelial_genes = (c("KRT4", "KRT5", "IVL")),
                           smooth_muscle_genes = (c("SMTN", "CALD1", "CSRP1", "TAGLN")),
                           skeletal_muscle_genes = (c("TNNC1", "TNNC2", "ACTC1", "MYH8"))) # Have to change downstream
+genes_flat <- unlist(genes_of_interest, use.names = FALSE)
 
 ## Reader of aligned positions and Visium positions
 # reads a CSV file containing aligned or Visium positions and returns a data frame with x and y coordinates
@@ -86,38 +88,32 @@ read_positions <- function(path, sample_name, type = "visium", scale_type = "hir
     pos <- read.csv(path, header = TRUE, check.names = FALSE, stringsAsFactors = FALSE)
     required_cols <- c("barcode", "x", "y")
     if (!all(required_cols %in% colnames(pos))) {
-      stop(paste(sample_name, " aligned file missing expected columns:", paste(required_cols, collapse = ", ")))
+      stop(paste(sample_name, "aligned file missing expected columns:", paste(required_cols, collapse = ", ")))
     }
     coord <- data.frame(x = as.numeric(pos$x), y = as.numeric(pos$y), row.names = pos$barcode)
   } else if (type == "visium") {
-    pos_path <- file.path(spatial_dir, "tissue_positions.csv")
-    scale_path <- file.path(spatial_dir, "scalefactors_json.json")
+    pos_path   <- file.path(path, "tissue_positions.csv")
+    scale_path <- file.path(path, "scalefactors_json.json")
     pos <- read.csv(pos_path, header = TRUE, row.names = 1, check.names = FALSE, stringsAsFactors = FALSE)
     required_cols <- c("pxl_row_in_fullres", "pxl_col_in_fullres")
     if (!all(required_cols %in% colnames(pos))) {
       stop(paste(sample_name, "tissue_positions.csv missing expected columns:", paste(required_cols, collapse = ", ")))
     }
-  }
-
-# scaling of the coordinate values and checking for non-finite values # nolint: indentation_linter.
-  scales <- fromJSON(scale_path)
-  if (scale_type == "hires") {
-    scale_factor <- scales$tissue_hires_scalef
-  } else if (scale_type == "lowres") {
-    scale_factor <- scales$tissue_lowres_scalef
+    scales <- fromJSON(scale_path)
+    scale_factor <- if (scale_type == "hires") scales$tissue_hires_scalef else scales$tissue_lowres_scalef
+    cat(sample_name, scale_type, "scale factor:", scale_factor, "\n")
+    coord <- data.frame(
+      x = as.numeric(pos$pxl_col_in_fullres) * scale_factor,
+      y = as.numeric(pos$pxl_row_in_fullres) * scale_factor,
+      row.names = rownames(pos)
+    )
   } else {
-    stop("scale_type must be either 'hires' or 'lowres'.")
+    stop("type must be 'aligned' or 'visium'")
   }
-  print(paste(sample_name, " ", scale_type, " scale factor:", scale_factor))
-  pos_scaled <- data.frame(
-    x = as.numeric(pos$pxl_col_in_fullres) * scale_factor,
-    y = as.numeric(pos$pxl_row_in_fullres) * scale_factor,
-    row.names = rownames(pos)
-  )
-  if (any(!is.finite(pos_scaled$x)) || any(!is.finite(pos_scaled$y))) {
-    stop(paste(sample_name, " scaled coordinates contain non-finite values."))
+  if (any(!is.finite(coord$x)) || any(!is.finite(coord$y))) {
+    stop(paste(sample_name, "coordinates contain non-finite values."))
   }
-  return(pos_scaled) # nolint: return_linter.
+  return(coord)
 }
 
 # checking of coordinate system (might be removed, here due to issues with STalign coordinates and printing warnings --> will retain until fix)
@@ -179,8 +175,8 @@ match_counts_to_positions <- function(counts, pos, sample_name) {
 }
 
 # reading counts and positions, checking coordinate systems, and matching counts to positions using the defined functions
-counts1 <- Read10X_h5(arvg$counts1)
-counts2 <- Read10X_h5(arvg$counts2)
+counts1 <- Read10X_h5(argv$counts1)
+counts2 <- Read10X_h5(argv$counts2)
 pos1 <- read_positions(argv$pos1,     sample_aligned_name,   type = "aligned")
 pos2 <- read_positions(argv$spatial2, sample_reference_name, type = "visium", scale_type = argv$scale)
 check_coordinate_system(pos1, pos2, sample_aligned_name, sample_reference_name)
@@ -199,16 +195,16 @@ counts2_matched <- matched[[sample_reference_name]]$counts
 coords2 <- matched[[sample_reference_name]]$coords
 
 # filtering genes of interest to those present in both count matrices
-genes_of_interest <- genes_of_interest[
-  genes_of_interest %in% rownames(counts1_matched) &
-  genes_of_interest %in% rownames(counts2_matched)]
-if (length(genes_of_interest) == 0)
+genes_flat <- genes_flat[
+  genes_flat %in% rownames(counts1_matched) &
+  genes_flat %in% rownames(counts2_matched)]
+if (length(genes_flat) == 0)
   stop("None of the target genes are present in both count matrices.")
-print(paste("Genes found in both samples:", length(genes_of_interest)))
+print(paste("Genes found in both samples:", length(genes_flat)))
 
 # filtering the count matrices to only include the genes of interest
-counts1_matched <- counts1_matched[genes_of_interest, , drop = FALSE]
-counts2_matched <- counts2_matched[genes_of_interest, , drop = FALSE]
+counts1_matched <- counts1_matched[genes_flat, , drop = FALSE]
+counts2_matched <- counts2_matched[genes_flat, , drop = FALSE]
 
 # creating a data frame for plotting the overlap of coordinates between the two samples
 df_coords <- rbind(
@@ -216,8 +212,8 @@ df_coords <- rbind(
   data.frame(coords2, sample = sample_reference_name)
 )
 # coordinate overlap check plot
-p_overlap <- ggplot(df_coords, aes(x = x, y = y, colour = sample)) + geom_point(size = 0.4, alpha = 0.5) + coord_fixed()
-+ theme_minimal() + labs(title = "Coordinate overlap check", x = "x coordinate", y = "y coordinate", colour = "Sample")
+p_overlap <- ggplot(df_coords, aes(x = x, y = y, colour = sample)) + geom_point(size = 0.4, alpha = 0.5) + coord_fixed() +
+theme_minimal() + labs(title = "Coordinate overlap check", x = "x coordinate", y = "y coordinate", colour = "Sample")
 ggsave(file.path(dir_qc, "Coordinate_Overlap.png"), p_overlap, width = 7, height = 6, dpi = 200)
 
 ## Object building
@@ -230,13 +226,13 @@ spe_list <- setNames(
 )
 
 ## Rasterization
-rastList <- rasterizeGeneExpression(spe_list, assay_name = "counts", resolution = arvg$res, square = FALSE, nThreads = arvg$threads)
+rastList <- rasterizeGeneExpression(spe_list, assay_name = "counts", resolution = argv$res, square = FALSE, nThreads = argv$threads)
 
 ## STcompare
-sc <- spatialCorrelationGeneExp(rastList, nThreads = arvg$threads)
-ss <- spatialSimilarity(rastList, nThreads = arvg$threads)
+sc <- spatialCorrelationGeneExp(rastList, nThreads = argv$threads)
+ss <- spatialSimilarity(rastList, nThreads = argv$threads)
 # spatial correlation results for genes of interest
-genes_in_sc <- genes_of_interest[genes_of_interest %in% rownames(sc)]
+genes_in_sc <- genes_flat[genes_flat %in% rownames(sc)]
 results <- sc[genes_in_sc, c("correlationCoef", "pValuePermuteX", "pValuePermuteY"), drop = FALSE]
 # adding empirical p-value and cell type annotation to the results
 results$empirical_pval <- pmax(results$pValuePermuteX, results$pValuePermuteY)
@@ -258,8 +254,8 @@ if (length(common_assays) == 0) {
 rast_assay <- if ("counts" %in% common_assays) {
   "counts"
 } else {
-  common_assays[1]
   warning(paste("Using first shared assay:", common_assays[1]))
+  common_assays[1]
 }
 # defining shared x and y limits for plotting based on the coordinates of both samples
 all_x <- Filter(is.finite, c(coords1[, "x"], coords2[, "x"]))
