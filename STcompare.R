@@ -11,7 +11,7 @@ suppressPackageStartupMessages({
   library(argparser, quietly = TRUE)
 })
 
-## Parsing command line arguments with argparser 
+## Parsing command line arguments with argparser
 p <- arg_parser("STcompare")
 # adding command line arguments
 p <- add_argument(p, "--counts1", help = "Path to the aligned sample counts file")
@@ -19,7 +19,6 @@ p <- add_argument(p, "--counts2", help = "Path to the reference sample counts fi
 p <- add_argument(p, "--pos1", help = "Path to the aligned positions file")
 p <- add_argument(p, "--spatial2", help = "Path to the reference spatial directory")
 p <- add_argument(p, "--outdir", help = "Output directory", default = "./STcompare_out")
-p <- add_argument(p, "--type", help = visium or aligned, default = "visium") # do i have to add this argument? I think it is not used in the code
 p <- add_argument(p, "--scale", help = "Scale type: highres | lowres", default = "hires")
 p <- add_argument(p, "--res",     help = "Raster resolution", default = 150L, type = "integer")
 p <- add_argument(p, "--threads", help = "Number of threads", default = 4L,   type = "integer")
@@ -82,7 +81,7 @@ genes_of_interest <- list(epithelial_genes = (c("KRT4", "KRT5", "IVL")),
 # @type: type of positions ("aligned" or "visium")
 # @scale_type: scale type for Visium positions ("hires" or "lowres")
 
-read_positions <- function(path,sample_name, type = "visium", scale_type = "hires") {
+read_positions <- function(path, sample_name, type = "visium", scale_type = "hires") {
   if (type == "aligned") {
     pos <- read.csv(path, header = TRUE, check.names = FALSE, stringsAsFactors = FALSE)
     required_cols <- c("barcode", "x", "y")
@@ -98,9 +97,9 @@ read_positions <- function(path,sample_name, type = "visium", scale_type = "hire
     if (!all(required_cols %in% colnames(pos))) {
       stop(paste(sample_name, "tissue_positions.csv missing expected columns:", paste(required_cols, collapse = ", ")))
     }
-}
+  }
 
-# scaling of the coordinate values and checking for non-finite values
+# scaling of the coordinate values and checking for non-finite values # nolint: indentation_linter.
   scales <- fromJSON(scale_path)
   if (scale_type == "hires") {
     scale_factor <- scales$tissue_hires_scalef
@@ -118,7 +117,7 @@ read_positions <- function(path,sample_name, type = "visium", scale_type = "hire
   if (any(!is.finite(pos_scaled$x)) || any(!is.finite(pos_scaled$y))) {
     stop(paste(sample_name, " scaled coordinates contain non-finite values."))
   }
-  return(pos_scaled)
+  return(pos_scaled) # nolint: return_linter.
 }
 
 # checking of coordinate system (might be removed, here due to issues with STalign coordinates and printing warnings --> will retain until fix)
@@ -126,19 +125,17 @@ check_coordinate_system <- function(coords1, coords2, sample_aligned_name, sampl
   ranges <- data.frame(sample = c(sample_aligned_name, sample_reference_name), min_x = c(min(coords1[, "x"]), min(coords2[, "x"])),
                        max_x = c(max(coords1[, "x"]), max(coords2[, "x"])), min_y = c(min(coords1[, "y"]), min(coords2[, "y"])),
                        max_y = c(max(coords1[, "y"]), max(coords2[, "y"])))
-  
+
   ranges$width <- ranges$max_x - ranges$min_x
   ranges$height <- ranges$max_y - ranges$min_y
 
   width_ratio <- max(ranges$width) / min(ranges$width)
   height_ratio <- max(ranges$height) / min(ranges$height)
-  
+
   x_overlap <- max(coords1[, "x"]) >= min(coords2[, "x"]) &&
     max(coords2[, "x"]) >= min(coords1[, "x"])
-  
   y_overlap <- max(coords1[, "y"]) >= min(coords2[, "y"]) &&
     max(coords2[, "y"]) >= min(coords1[, "y"])
-  
   if (!x_overlap || !y_overlap) {
     print(paste("Coordinate ranges do not overlap, samples are not in the same aligned coordinate space."))
   }
@@ -185,8 +182,8 @@ match_counts_to_positions <- function(counts, pos, sample_name) {
 counts1 <- Read10X_h5(arvg$counts1)
 counts2 <- Read10X_h5(arvg$counts2)
 pos1 <- read_positions(argv$pos1,     sample_aligned_name,   type = "aligned")
-pos2 <- read_positions(argv$spatial2, sample_reference_name, type = "visium", scale_type = argv$scale) 
-check_coordinate_system( pos1, pos2, sample_aligned_name, sample_reference_name)
+pos2 <- read_positions(argv$spatial2, sample_reference_name, type = "visium", scale_type = argv$scale)
+check_coordinate_system(pos1, pos2, sample_aligned_name, sample_reference_name)
 samples <- list(
   list(counts = counts1, pos = pos1, name = sample_aligned_name),
   list(counts = counts2, pos = pos2, name = sample_reference_name)
@@ -204,8 +201,7 @@ coords2 <- matched[[sample_reference_name]]$coords
 # filtering genes of interest to those present in both count matrices
 genes_of_interest <- genes_of_interest[
   genes_of_interest %in% rownames(counts1_matched) &
-  genes_of_interest %in% rownames(counts2_matched)
-]
+  genes_of_interest %in% rownames(counts2_matched)]
 if (length(genes_of_interest) == 0)
   stop("None of the target genes are present in both count matrices.")
 print(paste("Genes found in both samples:", length(genes_of_interest)))
@@ -219,13 +215,13 @@ df_coords <- rbind(
   data.frame(coords1, sample = sample_aligned_name),
   data.frame(coords2, sample = sample_reference_name)
 )
-# coordinate overlap check plot 
-p_overlap <- ggplot(df_coords, aes(x = x, y = y, colour = sample)) + geom_point(size = 0.4, alpha = 0.5) + coord_fixed() + theme_minimal()
-                    + labs(title = "Coordinate overlap check", x = "x coordinate", y = "y coordinate", colour = "Sample")
+# coordinate overlap check plot
+p_overlap <- ggplot(df_coords, aes(x = x, y = y, colour = sample)) + geom_point(size = 0.4, alpha = 0.5) + coord_fixed()
++ theme_minimal() + labs(title = "Coordinate overlap check", x = "x coordinate", y = "y coordinate", colour = "Sample")
 ggsave(file.path(dir_qc, "Coordinate_Overlap.png"), p_overlap, width = 7, height = 6, dpi = 200)
 
 ## Object building
-# creating SpatialExperiment objects for each sample using the matched counts and coordinates 
+# creating SpatialExperiment objects for each sample using the matched counts and coordinates
 spe_list <- setNames(
   mapply(function(counts, coords) {
     SpatialExperiment(assays = list(counts = counts), spatialCoords = coords)
@@ -243,7 +239,7 @@ ss <- spatialSimilarity(rastList, nThreads = arvg$threads)
 genes_in_sc <- genes_of_interest[genes_of_interest %in% rownames(sc)]
 results <- sc[genes_in_sc, c("correlationCoef", "pValuePermuteX", "pValuePermuteY"), drop = FALSE]
 # adding empirical p-value and cell type annotation to the results
-results$empirical_pval <- pmax(results$pValuePermuteX,results$pValuePermuteY)
+results$empirical_pval <- pmax(results$pValuePermuteX, results$pValuePermuteY)
 results$cell_type <- sapply(rownames(results), function(g) {
   names(which(sapply(genes_of_interest, function(grp) g %in% grp)))
 })
@@ -283,11 +279,11 @@ expr_label  <- "rasterised raw counts"
 # @name2: name of the second sample
 
 get_shared_gene_lims <- function(rastList, gene, assay_name, name1, name2) {
-vals <- Filter(is.finite, as.numeric(c(assay(rastList[[name1]], assay_name)[gene, ], assay(rastList[[name2]], assay_name)[gene, ])))
-if (length(vals) == 0) stop("No finite raster values found for gene ", gene)
-limits <- range(vals)
-if (limits[1] == limits[2]) limits <- limits + c(-0.5, 0.5)
-return(limits)
+  vals <- Filter(is.finite, as.numeric(c(assay(rastList[[name1]], assay_name)[gene, ], assay(rastList[[name2]], assay_name)[gene, ])))
+  if (length(vals) == 0) stop("No finite raster values found for gene ", gene)
+  limits <- range(vals)
+  if (limits[1] == limits[2]) limits <- limits + c(-0.5, 0.5)
+  return(limits)
 }
 # Creator of single raster plot for a given gene and sample
 # @rast: rasterised SpatialExperiment object for the sample
@@ -302,69 +298,45 @@ return(limits)
 
 make_single_raster <- function(rast, name, gene, gene_limits, rast_assay, shared_xlim, shared_ylim, coord_label, expr_label) {
   plotRaster(rast, assay_name = rast_assay, feature_name = gene, plotTitle = paste(name, "-", gene)
-  ) + scale_fill_viridis_c(limits = gene_limits, oob = scales::squish,name = paste0(gene, "\n", expr_label)
-    ) + coord_sf(xlim = shared_xlim, ylim = shared_ylim, expand = FALSE, clip = "off") + labs(
-      x = paste("x coordinate (", coord_label,")"),
-      y = paste("y coordinate (", coord_label,")")) + theme(plot.margin = margin(10, 10, 10, 10))
+  ) + scale_fill_viridis_c(limits = gene_limits, oob = squish, name = paste0(gene, "\n", expr_label)
+  ) + coord_sf(xlim = shared_xlim, ylim = shared_ylim, expand = FALSE, clip = "off") + labs(
+      x = paste("x coordinate (", coord_label, ")"),
+      y = paste("y coordinate (", coord_label, ")")) + theme(plot.margin = margin(10, 10, 10, 10))
 }
-## Joiner of raster plots
-# 
+## Joiner of raster plots for a single gene across two samples
+# creates a side-by-side patchwork plot with a shared fill scale for comparability
+# @gene: gene to plot
+# @rastList: named list of rasterised SpatialExperiment objects
+# @rast_assay: assay name to extract expression values from
+# @name1: name of the aligned sample
+# @name2: name of the reference sample
+# @shared_xlim: shared x-axis limits for spatial comparability
+# @shared_ylim: shared y-axis limits for spatial comparability
+# @coord_label: axis label describing the coordinate space (e.g. "hires scale")
+# @expr_label: legend label describing the expression values (e.g. "rasterised raw counts")
+
 make_raster_pair <- function(gene, rastList, rast_assay, name1, name2, shared_xlim, shared_ylim, coord_label, expr_label) {
-gene_limits <- get_shared_gene_lims(rastList, gene, rast_assay, name1, name2)
-plots <- lapply(c(name1, name2), function(name) {
-  make_single_raster(rastList[[name]], name, gene, gene_limits, rast_assay, shared_xlim, shared_ylim, coord_label, expr_label)
-})
-plots[[1]] + plots[[2]] + plot_layout(guides = "collect") & theme(legend.position = "right")
+  gene_limits <- get_shared_gene_lims(rastList, gene, rast_assay, name1, name2)
+  plots <- lapply(c(name1, name2), function(name) {
+    make_single_raster(rastList[[name]], name, gene, gene_limits, rast_assay, shared_xlim, shared_ylim, coord_label, expr_label)
+  })
+  plots[[1]] + plots[[2]] + plot_layout(guides = "collect") & theme(legend.position = "right")
+}
 
-# 
-for (gene in genes_of_interest) {
+# loop over all genes of interest and save plots for each analysis type
+# raster and correlation plots are only saved if the gene is present in the correlation results
+save_plot <- function(plot, path, width, height) {
+  ggsave(path, plot, width = width, height = height, dpi = 300, bg = "white")
+}
+for (gene in genes_flat) {
   if (gene %in% genes_in_sc) {
-    p_raster <- make_raster_pair(gene = gene, rastList = rastList, rast_assay = rast_assay, name1 = sample_aligned_name, name2 = sample_reference_name,
-                                 shared_xlim = shared_xlim, shared_ylim = shared_ylim, coord_label = coord_label, expr_label = expr_label)
-  ggsave(file.path(dir_raster, paste0(gene, "_Raster.png")),
-      p_raster,
-      width = 11,
-      height = 5.5,
-      dpi = 300,
-      bg = "white"
-    )
-    
-    p_cor <- plotCorrelationGeneExp(
-      rastList,
-      sc,
-      gene
-    )
-    
-    ggsave(
-      file.path(dir_correlation, paste0(gene, "_Correlation.png")),
-      p_cor,
-      width = 10,
-      height = 5,
-      dpi = 300,
-      bg = "white"
-    )
+    save_plot(make_raster_pair(gene, rastList, rast_assay, sample_aligned_name, sample_reference_name,
+                               shared_xlim, shared_ylim, coord_label, expr_label),
+              file.path(dir_raster, paste0(gene, "_Raster.png")), width = 11, height = 5.5)
+    save_plot(plotCorrelationGeneExp(rastList, sc, gene),
+              file.path(dir_correlation, paste0(gene, "_Correlation.png")), width = 10, height = 5)
   }
-  
-  p_lr <- linearRegression(input = ss, gene = gene)
-  
-  ggsave(
-    file.path(dir_linear, paste0(gene, "_LinearRegression.png")),
-    p_lr,
-    width = 10,
-    height = 5,
-    dpi = 300,
-    bg = "white"
-  )
-  
-  p_pc <- pixelClass(input = ss, gene = gene)
-  
-  ggsave(
-    file.path(dir_pixel, paste0(gene, "_PixelClass.png")),
-    p_pc,
-    width = 10,
-    height = 5,
-    dpi = 300,
-    bg = "white"
-  )
-
+  save_plot(linearRegression(input = ss, gene = gene),
+            file.path(dir_linear, paste0(gene, "_LinearRegression.png")), width = 10, height = 5)
+  save_plot(pixelClass(input = ss, gene = gene), file.path(dir_pixel, paste0(gene, "_PixelClass.png")), width = 10, height = 5)
 }
