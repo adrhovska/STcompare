@@ -57,15 +57,12 @@ comparison_name <- paste0(sample_aligned_name, "_vs_", sample_reference_name, "_
 dir_comparison <- file.path(argv$outdir, comparison_name)
 dir.create(dir_comparison, showWarnings = FALSE, recursive = TRUE)
 # 3. create further subdirectories
-dir_results <- file.path(dir_comparison, "Results")
-dir_qc <- file.path(dir_comparison, "Coordinate_QC")
-dir_raster <- file.path(dir_comparison, "Raster_Plots")
-dir_correlation <- file.path(dir_comparison, "Correlation_Plots")
-dir_linear <- file.path(dir_comparison, "Linear_Regression")
-dir_pixel <- file.path(dir_comparison, "Pixel_Class")
-output_dirs <- c(dir_results, dir_qc, dir_raster, dir_correlation, dir_linear, dir_pixel)
-for (d in output_dirs) {
-  dir.create(d, showWarnings = FALSE, recursive = TRUE)
+output_names <- list()
+output_dirs <- c("Results", "Coordinate_QC", "Raster_Plots", "Correlation_Plots", "Linear_Regression", "Pixel_Class")
+for (d in output_names) {
+  file_path <- file.path(dir_comparison, d)
+  dir.create(file_path, showWarnings = FALSE, recursive = TRUE)
+  output_names[[d]] <- file_path
 }
 
 # defining genes of interest (from Supplementary material Extended Data Figure 8 b))
@@ -177,7 +174,7 @@ match_counts_to_positions <- function(counts, pos, sample_name) {
 # reading counts and positions, checking coordinate systems, and matching counts to positions using the defined functions
 counts1 <- Read10X_h5(argv$counts1)
 counts2 <- Read10X_h5(argv$counts2)
-pos1 <- read_positions(argv$pos1,     sample_aligned_name,   type = "aligned")
+pos1 <- read_positions(argv$pos1, sample_aligned_name, type = "aligned")
 pos2 <- read_positions(argv$spatial2, sample_reference_name, type = "visium", scale_type = argv$scale)
 check_coordinate_system(pos1, pos2, sample_aligned_name, sample_reference_name)
 samples <- list(
@@ -214,7 +211,7 @@ df_coords <- rbind(
 # coordinate overlap check plot
 p_overlap <- ggplot(df_coords, aes(x = x, y = y, colour = sample)) + geom_point(size = 0.4, alpha = 0.5) + coord_fixed() +
 theme_minimal() + labs(title = "Coordinate overlap check", x = "x coordinate", y = "y coordinate", colour = "Sample")
-ggsave(file.path(dir_qc, "Coordinate_Overlap.png"), p_overlap, width = 7, height = 6, dpi = 200)
+ggsave(file.path(output_dirs[["Coordinate_QC"]], "Coordinate_QC.png"), p_overlap, width = 7, height = 6, dpi = 200)
 
 ## Object building
 # creating SpatialExperiment objects for each sample using the matched counts and coordinates
@@ -242,7 +239,7 @@ results$cell_type <- sapply(rownames(results), function(g) {
 print(results)
 
 # saving the results to a CSV file in the results directory
-write.csv(results, file.path(dir_results, "Results_Table.csv"), row.names = TRUE)
+write.csv(results, file.path(output_dirs[["Results"]], "Results_Table.csv"), row.names = TRUE)
 
 # defining the raster assay to use for plotting
 assays1 <- assayNames(rastList[[sample_aligned_name]])
@@ -328,11 +325,11 @@ for (gene in genes_flat) {
   if (gene %in% genes_in_sc) {
     save_plot(make_raster_pair(gene, rastList, rast_assay, sample_aligned_name, sample_reference_name,
                                shared_xlim, shared_ylim, coord_label, expr_label),
-              file.path(dir_raster, paste0(gene, "_Raster.png")), width = 11, height = 5.5)
+              file.path(output_dirs[["Raster_Plots"]], paste0(gene, "_Raster.png")), width = 11, height = 5.5)
     save_plot(plotCorrelationGeneExp(rastList, sc, gene),
-              file.path(dir_correlation, paste0(gene, "_Correlation.png")), width = 10, height = 5)
+              file.path(output_dirs[["Correlation_Plots"]], paste0(gene, "_Correlation.png")), width = 10, height = 5)
   }
   save_plot(linearRegression(input = ss, gene = gene),
-            file.path(dir_linear, paste0(gene, "_LinearRegression.png")), width = 10, height = 5)
-  save_plot(pixelClass(input = ss, gene = gene), file.path(dir_pixel, paste0(gene, "_PixelClass.png")), width = 10, height = 5)
+            file.path(output_dirs[["Linear_Regression"]], paste0(gene, "_LinearRegression.png")), width = 10, height = 5)
+  save_plot(pixelClass(input = ss, gene = gene), file.path(output_dirs[["Pixel_Class"]], paste0(gene, "_PixelClass.png")), width = 10, height = 5)
 }
