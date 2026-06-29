@@ -258,7 +258,7 @@ def auto_landmarks_orb(
         fig.savefig(outplot, dpi=300)
         plt.close(fig)
 
-    return pointsI, pointsJ
+    return pointsI, pointsJ, affine
 
 
 def read_landmark_points(points_file, image_downsample=1):
@@ -410,6 +410,8 @@ def parse_args():
     parser.add_argument("--auto_landmarks", action="store_true", help="Automatically detect landmark matches between H&E images using ORB + RANSAC.")
     parser.add_argument("--max_auto_landmarks", type=int, default=80, help="Maximum number of automatic landmarks to pass into STalign.")
     parser.add_argument("--min_auto_landmarks", type=int, default=8, help="Minimum number of automatic landmark matches required.")
+    parser.add_argument("--points1", default=None, help="Optional manual source landmarks CSV with columns y,x.")
+    parser.add_argument("--points2", default=None, help="Optional manual reference landmarks CSV with columns y,x.")
     parser.add_argument("--auto_match_ratio", type=float, default=0.75, help="Lowe ratio threshold for ORB feature matching.")
     parser.add_argument("--auto_ransac_thresh", type=float, default=25.0, help="RANSAC reprojection threshold in downsampled image pixels.")
     return parser.parse_args()
@@ -484,10 +486,11 @@ def main():
     pointsJ = None
     L = None
     T = None
+    affine_auto = None
 
     if args.auto_landmarks:
         auto_landmark_plot = outdir / (f"{args.sample_aligned}_auto_landmarks_source.png")
-        pointsI, pointsJ = auto_landmarks_orb(
+        pointsI, pointsJ, affine_auto = auto_landmarks_orb(
             image1=image1,
             image2=image2,
             image_downsample=args.image_downsample,
