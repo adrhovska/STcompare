@@ -2,7 +2,7 @@
 align_and_add_barcodes.py
 
 Aligns an input Visium sample (aligned) to a reference Visium sample
-using STalign LDDMM, then attaches barcodes to the aligned coordinates.
+using STalign LDDMM, then attaches barcodes to the aligned coordinates. --> or check barcode presence, fix ?
 
 USAGE:
     python align_and_add_barcodes.py \
@@ -29,16 +29,12 @@ OUTPUTS:
 import argparse
 import json
 import os
-
 import numpy as np
 import pandas as pd
 import torch
 from torch.nn.functional import grid_sample
+from STalign import STalign
 
-
-# =============================================================================
-# Core interpolation and transform utilities
-# =============================================================================
 
 def _interp(x, I, phii, **kwargs):
     """Interpolate 2D image I at positions phii using torch grid_sample."""
@@ -73,9 +69,6 @@ def _normalize(arr, t_min=0, t_max=1):
     return ((arr - np.min(arr)) / diff_arr * (t_max - t_min)) + t_min
 
 
-# =============================================================================
-# Rasterization
-# =============================================================================
 
 def rasterize_spots(x, y, dx=30.0, blur=1.0, expand=1.1):
     """
@@ -134,9 +127,6 @@ def rasterize_spots(x, y, dx=30.0, blur=1.0, expand=1.1):
     return X_, Y_, W
 
 
-# =============================================================================
-# Position file reading
-# =============================================================================
 
 def _has_no_header(path):
     """
@@ -198,9 +188,6 @@ def read_positions(pos_path, scale_path, scale_type="hires", in_tissue_only=True
     return pos[["barcode", "x", "y"]].reset_index(drop=True)
 
 
-# =============================================================================
-# LDDMM alignment
-# =============================================================================
 
 def align_samples(pos1, pos2, dx=30.0, blur=2.0,
                   niter=500, diffeo_start=100,
@@ -334,10 +321,6 @@ def align_samples(pos1, pos2, dx=30.0, blur=2.0,
     return A, v.detach(), xv, xI
 
 
-# =============================================================================
-# Spot transformation
-# =============================================================================
-
 def transform_spots(pos1, A, v, xv, device="cpu", dtype=torch.float64):
     """
     Apply the forward transform (velocity field then affine) to sample 1 spots
@@ -383,10 +366,6 @@ def transform_spots(pos1, A, v, xv, device="cpu", dtype=torch.float64):
         "y": pts_t[:, 0],   # row → y
     })
 
-
-# =============================================================================
-# CLI
-# =============================================================================
 
 def parse_args():
     p = argparse.ArgumentParser(
