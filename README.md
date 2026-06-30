@@ -8,11 +8,11 @@ Each sample should be a standard 10x Visium output folder containing:
 
 ```text
 Sample_ST/
-├── filtered_feature_bc_matrix.h5
-└── spatial/
-    ├── tissue_hires_image.png
-    ├── tissue_positions.csv
-    └── scalefactors_json.json
+|--- filtered_feature_bc_matrix.h5
+|___ spatial/
+    |--- tissue_hires_image.png
+    |--- tissue_positions.csv
+    |___ scalefactors_json.json
 ```
 
 The workflow assumes the following default files for the two tissues:
@@ -29,9 +29,10 @@ REFERENCE_DIR/spatial/scalefactors_json.json
 
 ## Requirements
 The workflow uses two separate conda environments:
-
+```bash
 python_env
 r_env
+```
 
 By default:
 - `LandmarkPicker.py` and `STalignCode.py` run in python_env
@@ -54,11 +55,73 @@ Run the workflow:
   --sample_aligned SourceSample \
   --sample_reference ReferenceSample
 ```
-the code thus requires four arguments, those being: source_dir (path to the source 10x Visium folder, this is the sample being aligned), reference_dir (path to the reference 10x Visium folder, this is the template of the alignment), sample_aligned (name of the aligned sample), sample_reference (name of the reference sample)
-optional arguments include: project_dir (output project directory, default is current working directory), script_dir (directory containing LandmarkPicker.py, STalignCode.py and STcompare.R, default is directory containing STworkflow.sh), py_env (Python conda environment name, default is python_env), r_env (R conda environment, default is r_env), counts1 (custom source count matrix path, default is filtered_feature_bc_matrix.h5), counts2 (custom reference count matrix path, default is REFERENCE_DIR/filtered_feature_bc_matrix.h5), spatial2 (custom reference spatial folder path, default is REFERENCE_DIR/spatial)
-
+the code thus requires four arguments, those being:
+```bash 
+--source_dir (path to the source 10x Visium folder, this is the sample being aligned),
+--reference_dir (path to the reference 10x Visium folder, this is the template of the alignment),
+--sample_aligned (name of the aligned sample),
+--sample_reference (name of the reference sample)
+```
+optional arguments include:
+```bash
+--project_dir (output project directory, default is current working directory),
+--script_dir (directory containing LandmarkPicker.py, STalignCode.py and STcompare.R, default is directory containing STworkflow.sh),
+--py_env (Python conda environment name, default is python_env),
+--r_env (R conda environment, default is r_env),
+--counts1 (custom source count matrix path, default is filtered_feature_bc_matrix.h5),
+--counts2 (custom reference count matrix path, default is REFERENCE_DIR/filtered_feature_bc_matrix.h5), 
+--spatial2 (custom reference spatial folder path, default is REFERENCE_DIR/spatial)
+```
 ## Outputs
 The workflow creates one pair-specific output folder with Landmarks, STalign and STcompare folders. 
+
+### Landmarks
+Includes source and reference sample points and paired to files in CSV. The two essential files are (the paired file is used for QC, more below in LandmarkPicker section):
+```text
+Native_1_points.csv
+Native_2_points.csv
+```
+These are passed into `STalignCode.py` as:
+```text
+--points1
+--points2
+```
+### STalign
+
+Includes CSV file, plots before and after alignment as well as landmark fit and affine transformation file:
+```text
+Native_1_aligned_to_Native_2_barcodes.csv
+Native_1_vs_Native_2_before_alignment.png
+Native_1_aligned_to_Native_2_after_alignment.png
+Native_1_to_Native_2_manual_landmark_fit.png
+Native_1_to_Native_2_manual_affine_transform.npz
+```
+The most important file is:
+```text
+Native_1_aligned_to_Native_2_barcodes.csv
+```
+This contains the aligned source spot coordinates and is passed into `STcompare.R`.
+
+### STcmpare
+The outputs of this folder contain:
+```text
+Results/
+Coordinate_QC/
+Raster_Plots/
+Correlation_Plots/
+Linear_Regression/
+Pixel_Class/
+```
+The main result table is saved as:
+```text
+STcompare/Results/Results_Table.csv. This is a file key for comparison of the samples and is accompanied by multiple plots. 
+```
+## Notes
+### Coordinate system 
+- Manual landmarks are selected on `tissue_hires_image.png`. Therefore, `STalignCode.py` converts 10x Visium full-resolution spot coordinates into the hires image coordinate system. This ensures that landmark coordinates and spot coordinates are in the same coordinate system.
+- The workflow always runs `LandmarkPicker.py`, so each run creates a new set of landmarks.
+- If the same sample names and output folder are used again, previous landmark and alignment outputs may be overwritten.
+- No project specific pathways are hardcoded in the script. Input data paths are passed through command-line arguments, and outputs are written to cwd or  selected project directory.
 
 -------------------------------------------------------------------------------------------------------------------------------
 The workflow file encompasses the following modules:
@@ -69,7 +132,7 @@ This Python script is used to manually select matching landmark pairs between tw
 ## Description
 This code is a command line Python script that opens two H&E images, one source tissue image and one reference tissue image, and allows the user to click matching landmark points between them. For each landmark pair, the script first displays the source image and asks the user to click a landmark. It then displays the reference image and asks the user to click the corresponding matching landmark. This is repeated for the prior selected number of landmark pairs (recommended 6 to 10).
 
-The output files are saved in a directory named after the two samples and can be passed directly to STalignCode.py using the --points1 and --points2 arguments.
+The output files are saved in a directory named after the two samples and can be passed directly to STalignCode.py using the `--points1` and `--points2` arguments.
 
 landmark reccs: landmark pairs should be matching clear anatomical or structural points of the tissues visible in both H&E images. Such might include tissue corners, adventitia on the outside of the section, folds, holes and indentations, internal structures (lumen). They should ideally be spread out throughout the whole tissue section and not clustered in one area. 
 
