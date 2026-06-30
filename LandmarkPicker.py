@@ -21,14 +21,14 @@ def click_landmark(img, title):
     # creating and displaying window for the img 
     fig, ax = plt.subplots(figsize=(10, 10))
     ax.imshow(img)
-    ax.set_title(title = "Pick landmark")
+    ax.set_title(title)
     # matplotlib returns coordinates as x, y
     clicked = plt.ginput(1, timeout=0)
     if not clicked:
         raise RuntimeError("No landmark was selected.")
     plt.close(fig)
     # storing clicked coordinates, first x then y 
-    x, y = clicked
+    x, y = clicked[0]
     # returning y first because this is needed for further analysis like this
     return y, x
 
@@ -40,7 +40,7 @@ def main():
     project_dir = Path(args.project_dir)
 
     # creating alignment and project drectory names 
-    pair_name = f"{args.sample_aligned}_aligned_to_{args.sample_reference}"
+    pair_name = f"{args.sample_aligned}_paired_to_{args.sample_reference}"
     outdir = project_dir / "landmarks" / pair_name
     outdir.mkdir(parents=True, exist_ok=True)
 
