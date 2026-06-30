@@ -1,39 +1,97 @@
+# load required libraries
 from pathlib import Path
+import argparse
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 
-image1 = Path("/Users/adrhovska/Desktop/STdata/Native_1_ST/spatial/tissue_hires_image.png")
-image2 = Path("/Users/adrhovska/Desktop/STdata/Native_2_ST/spatial/tissue_hires_image.png")
-out1 = Path("/Users/adrhovska/Desktop/STdata/STcompare_code/points1.csv")
-out2 = Path("/Users/adrhovska/Desktop/STdata/STcompare_code/points2.csv")
-img1 = mpimg.imread(image1)
-img2 = mpimg.imread(image2)
-points1 = []
-points2 = []
-n_points = int(input("How many landmark pairs? Recommended 6-10: "))
+# argument parsing 
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--image1", required=True, help="Source tissue_hires_image.png")
+    parser.add_argument("--image2", required=True, help="Reference tissue_hires_image.png")
+    parser.add_argument("--sample_aligned", required=True, help="Source sample name")
+    parser.add_argument("--sample_reference", required=True, help="Reference sample name")
+    parser.add_argument( "--project_dir", default="/Users/adrhovska/Desktop/STdata/STcompare_code", help="Main project directory")
+    return parser.parse_args()
 
-for i in range(n_points):
-    fig, ax = plt.subplots(figsize=(10, 10))
-    ax.imshow(img1)
-    ax.set_title(f"Sample1/source: click landmark {i + 1}")
-    clicked = plt.ginput(1, timeout=0)[0]
-    plt.close(fig)
+def main():
+    # reading terminal arguments and converting image/project paths from text strings to objects 
+    args = parse_args()
+    image1 = Path(args.image1)
+    image2 = Path(args.image2)
+    project_dir = Path(args.project_dir)
+    # creating alignment and project drectory names 
+    pair_name = f"{args.sample_aligned}_aligned_to_{args.sample_reference}"
+    outdir = project_dir / "landmarks" / pair_name
+    outdir.mkdir(parents=True, exist_ok=True)
+    # output CSVs
+    out1 = outdir / f"{args.sample_aligned}_points.csv"
+    out2 = outdir / f"{args.sample_reference}_points.csv"
+    out_combined = outdir / f"{pair_name}_landmark_pairs_combined.csv"
+    # reading imgs into Python
+    img1 = mpimg.imread(image1)
+    img2 = mpimg.imread(image2)
+    # point storage
+    points1 = []
+    points2 = []
+    # defining the number of landmarks (usually around 6 to 10, pick corners/sides and centre)
+    n_points = int(input("Choose amount of landmark points (usually 6 to 10): "))
+    # looping over landmark pairs 
+    for i in range(n_points):
+        # creating and displaying window for the img 
+        fig, ax = plt.subplots(figsize=(10, 10))
+        ax.imshow(img1)
+        ax.set_title(f"{args.sample_aligned}/source: click landmark {i + 1}")
+        # matplotlib returns coordinates as x, y
+        clicked = plt.ginput(1, timeout=0)[0]
+        plt.close(fig)
+        # storing clicked coordinates, first x then y 
+        x1, y1 = clicked
+        # saving points as dictionary with y first (needed for further analysis like this)
+        points1.append(
+            {
+                "landmark": i + 1,
+                "y": y1,
+                "x": x1,
+            }
+        )
+        # the same for second img --> might be siplified into one ?
+        fig, ax = plt.subplots(figsize=(10, 10))
+        ax.imshow(img2)
+        ax.set_title(f"{args.sample_reference}/reference: click matching landmark {i + 1}")
+        clicked = plt.ginput(1, timeout=0)[0]
+        plt.close(fig)
 
-    x1, y1 = clicked
-    points1.append({"y": y1, "x": x1})
+        x2, y2 = clicked
+        points2.append(
+            {
+                "landmark": i + 1,
+                "y": y2,
+                "x": x2,
+            }
+        )
+    # converting into pandas dfs
+    df1 = pd.DataFrame(points1)
+    df2 = pd.DataFrame(points2)
+    # saving as CSVs for further analysis 
+    df1[["y", "x"]].to_csv(out1, index=False)
+    df2[["y", "x"]].to_csv(out2, index=False)
+    # creates one combined table with both source and reference landmarks
+    combined = pd.DataFrame(
+        {
+            "landmark": df1["landmark"],
+            f"{args.sample_aligned}_y": df1["y"],
+            f"{args.sample_aligned}_x": df1["x"],
+            f"{args.sample_reference}_y": df2["y"],
+            f"{args.sample_reference}_x": df2["x"],
+        }
+    )
+    # saving and printing directories of saving 
+    combined.to_csv(out_combined, index=False)
+    print(f"Source points:    {out1}")
+    print(f"Reference points: {out2}")
+    print(f"Combined file:    {out_combined}")
 
-    fig, ax = plt.subplots(figsize=(10, 10))
-    ax.imshow(img2)
-    ax.set_title(f"Sample2/reference: click matching landmark {i + 1}")
-    clicked = plt.ginput(1, timeout=0)[0]
-    plt.close(fig)
-
-    x2, y2 = clicked
-    points2.append({"y": y2, "x": x2})
-
-pd.DataFrame(points1).to_csv(out1, index=False)
-pd.DataFrame(points2).to_csv(out2, index=False)
-
-print(f"Saved: {out1}")
-print(f"Saved: {out2}")
+if __name__ == "__main__":
+    main()
