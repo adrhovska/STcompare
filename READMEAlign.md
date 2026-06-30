@@ -1,5 +1,6 @@
 # STalign
 This Python script aligns one 10x Visium tissue to a reference tissue based on manually selected H&E landmark pairs using LandmarkPicker.py. This fitted affine transform is then applied to Visium spot coordinates. 
+
 ## Description
 This code is a command line Python script which aligns two ST samples from 10x Visium in order for them to be usable for STcompare. Using LandmarkPicker.py (separate Python script), landmarks are used to fit an affine transform from the source to the reference sample. This transform is then applied to the spot coordinates and generate an aligned coordinate file in the same coordinate space, which can then further be used for downstream spatial comparison using STcompare.
 

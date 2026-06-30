@@ -28,7 +28,7 @@ optional arguments include: project_dir (main project directory where the landma
 ## Outputs 
 Outputs are saved in a directory named after the two samples. The directory contains source landmark CSV, reference landmark CSV and combined landmark CSV for QC. For STalignCode.py only the first two are essential, the last one serves as a check whether landmark order has been preserved.
 
-## Additional Notes
+## Additional Notes and QC
 -- matplotlib records clicked coordinates as x,y, but this script saves them as y,x because that is the coordinate format expected by STalignCode.py
 -- for H&E landmark picking from tissue_hires_image.png, the resulting landmark coordinates should be used with: --coord_scale hires in STalignCode.py
 -- in STalignCode.py would be passed as arguments pos1 (source tissue CSV) and pos2 (reference tissue CSV)
