@@ -1,7 +1,9 @@
 # STcompare
-This RScript compares spatial gene expression patterns of two Visium tissue sections
+This RScript compares spatial gene expression patterns of two Visium tissue sections.
+
 ## Description
 This code is a command line RScript taking two 10x Visium spatial transcriptomics samples and comparing the spatial pattern and expression magnitude of genes specific for three tissue types: epithelium, smooth and skeletal muscle. This comparison is useful, for example, for assessing similarity between native and engineered tissue samples. 
+
 ## Dependencies
 R 4.2 or higher
 The following R packages: Seurat, ggplot2, patchwork, jsonlite, scales and SpatialExperiment, SEraster, STcompare and SummarizedExperiment from BiocManager 

@@ -15,25 +15,6 @@ R_ENV="r_env"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(pwd)"
 
-# help message
-usage() {
-  echo "Usage:"
-  echo "  ./STworkflow.sh \\"
-  echo "    --source_dir SOURCE_10X_FOLDER \\"
-  echo "    --reference_dir REFERENCE_10X_FOLDER \\"
-  echo "    --sample_aligned SOURCE_SAMPLE_NAME \\"
-  echo "    --sample_reference REFERENCE_SAMPLE_NAME"
-  echo ""
-  echo "Optional:"
-  echo "  --project_dir PROJECT_FOLDER"
-  echo "  --script_dir TOOL_SCRIPT_FOLDER"
-  echo "  --py_env PYTHON_CONDA_ENV"
-  echo "  --r_env R_CONDA_ENV"
-  echo "  --counts1 SOURCE_COUNTS_FILE"
-  echo "  --counts2 REFERENCE_COUNTS_FILE"
-  echo "  --spatial2 REFERENCE_SPATIAL_FOLDER"
-}
-
 # parse arguments
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -136,12 +117,16 @@ COUNTS1="${COUNTS1:-${SOURCE_DIR}/filtered_feature_bc_matrix.h5}"
 COUNTS2="${COUNTS2:-${REFERENCE_DIR}/filtered_feature_bc_matrix.h5}"
 SPATIAL2="${SPATIAL2:-${REFERENCE_DIR}/spatial}"
 
-LANDMARK_PAIR_NAME="${SAMPLE_ALIGNED}_paired_to_${SAMPLE_REFERENCE}"
 ALIGN_PAIR_NAME="${SAMPLE_ALIGNED}_aligned_to_${SAMPLE_REFERENCE}"
+LANDMARK_PAIR_NAME="${SAMPLE_ALIGNED}_paired_to_${SAMPLE_REFERENCE}"
 
-LANDMARK_DIR="${PROJECT_DIR}/landmarks/${LANDMARK_PAIR_NAME}"
-STALIGN_OUTDIR="${PROJECT_DIR}/STalign_outputs/${ALIGN_PAIR_NAME}"
-STCOMPARE_OUTDIR="${PROJECT_DIR}/STcompare_outputs/${ALIGN_PAIR_NAME}"
+# one shared output folder for the full workflow
+RUN_DIR="${PROJECT_DIR}/STcompare_outputs/${ALIGN_PAIR_NAME}"
+
+# outputs from each step
+LANDMARK_DIR="${RUN_DIR}/landmarks/${LANDMARK_PAIR_NAME}"
+STALIGN_OUTDIR="${RUN_DIR}/STalign"
+STCOMPARE_OUTDIR="${RUN_DIR}/STcompare"
 
 POINTS1="${LANDMARK_DIR}/${SAMPLE_ALIGNED}_points.csv"
 POINTS2="${LANDMARK_DIR}/${SAMPLE_REFERENCE}_points.csv"
@@ -196,6 +181,9 @@ need_file "$COUNTS1"
 need_file "$COUNTS2"
 need_dir "$SPATIAL2"
 
+# create main run directory
+mkdir -p "$RUN_DIR"
+
 ## Workflow
 # 1: LandmarkPicker.py
 echo "Step 1: Running LandmarkPicker.py"
@@ -206,7 +194,7 @@ python "$LANDMARK_PICKER" \
   --image2 "$REFERENCE_IMAGE" \
   --sample_aligned "$SAMPLE_ALIGNED" \
   --sample_reference "$SAMPLE_REFERENCE" \
-  --project_dir "$PROJECT_DIR"
+  --project_dir "$RUN_DIR"
 deactivate_env
 
 # check landmark files
@@ -225,8 +213,12 @@ python "$STALIGN_SCRIPT" \
   --points2 "$POINTS2" \
   --sample_aligned "$SAMPLE_ALIGNED" \
   --sample_reference "$SAMPLE_REFERENCE" \
-  --project_dir "$PROJECT_DIR"
+  --project_dir "$RUN_DIR" \
+  --outdir "$STALIGN_OUTDIR"
 deactivate_env
+
+# check aligned coordinate file
+need_file "$ALIGNED_POS"
 
 # 3: STcompare.R
 echo "Step 3: Running STcompare.R"
@@ -239,11 +231,13 @@ Rscript "$STCOMPARE_SCRIPT" \
   --outdir "$STCOMPARE_OUTDIR" \
   --sample_aligned "$SAMPLE_ALIGNED" \
   --sample_reference "$SAMPLE_REFERENCE"
+
 deactivate_env
 
 echo "Complete :D"
 echo "Project directory:    $PROJECT_DIR"
 echo "Tool directory:       $SCRIPT_DIR"
+echo "Run directory:        $RUN_DIR"
 echo "Landmarks:            $LANDMARK_DIR"
 echo "Aligned coordinates:  $ALIGNED_POS"
 echo "STalign outputs:      $STALIGN_OUTDIR"
