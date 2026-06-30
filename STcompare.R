@@ -59,12 +59,10 @@ dir.create(dir_comparison, showWarnings = FALSE, recursive = TRUE)
 # 3. create further subdirectories
 output_names <- list()
 output_dirs <- c("Results", "Coordinate_QC", "Raster_Plots", "Correlation_Plots", "Linear_Regression", "Pixel_Class")
-output_dirs <- setNames(
-  file.path(dir_comparison, output_names),
-  output_names
-)
 for (d in output_names) {
-  dir.create(output_dirs[[d]], showWarnings = FALSE, recursive = TRUE)
+  file_path <- file.path(dir_comparison, d)
+  dir.create(file_path, showWarnings = FALSE, recursive = TRUE)
+  output_names[[d]] <- file_path
 }
 
 # defining genes of interest (from Supplementary material Extended Data Figure 8 b))
@@ -222,7 +220,7 @@ p_overlap <- ggplot(df_coords, aes(x = x, y = y, colour = sample)) +
   coord_fixed() +
   theme_minimal() +
   labs(title = "Coordinate overlap check", x = "x coordinate", y = "y coordinate", colour = "Sample")
-ggsave(file.path(output_dirs[["Coordinate_QC"]], "Coordinate_QC.png"), p_overlap, width = 7, height = 6, dpi = 200)
+ggsave(file.path(output_names[["Coordinate_QC"]], "Coordinate_QC.png"), p_overlap, width = 7, height = 6, dpi = 200)
 
 ## Object building
 # creating SpatialExperiment objects for each sample using the matched counts and coordinates
@@ -250,7 +248,7 @@ results$cell_type <- sapply(rownames(results), function(g) {
 print(results)
 
 # saving the results to a CSV file in the results directory
-write.csv(results, file.path(output_dirs[["Results"]], "Results_Table.csv"), row.names = TRUE)
+write.csv(results, file.path(output_names[["Results"]], "Results_Table.csv"), row.names = TRUE)
 
 # defining the raster assay to use for plotting
 assays1 <- assayNames(rastList[[sample_aligned_name]])
@@ -338,17 +336,17 @@ for (gene in genes_flat) {
         gene, rastList, rast_assay, sample_aligned_name, sample_reference_name,
         shared_xlim, shared_ylim, coord_label, expr_label
       ),
-      file.path(output_dirs[["Raster_Plots"]], paste0(gene, "_Raster.png")),
+      file.path(output_names[["Raster_Plots"]], paste0(gene, "_Raster.png")),
       width = 11, height = 5.5
     )
     save_plot(plotCorrelationGeneExp(rastList, sc, gene),
-      file.path(output_dirs[["Correlation_Plots"]], paste0(gene, "_Correlation.png")),
+      file.path(output_names[["Correlation_Plots"]], paste0(gene, "_Correlation.png")),
       width = 10, height = 5
     )
   }
   save_plot(linearRegression(input = ss, gene = gene),
-    file.path(output_dirs[["Linear_Regression"]], paste0(gene, "_LinearRegression.png")),
+    file.path(output_names[["Linear_Regression"]], paste0(gene, "_LinearRegression.png")),
     width = 10, height = 5
   )
-  save_plot(pixelClass(input = ss, gene = gene), file.path(output_dirs[["Pixel_Class"]], paste0(gene, "_PixelClass.png")), width = 10, height = 5)
+  save_plot(pixelClass(input = ss, gene = gene), file.path(output_names[["Pixel_Class"]], paste0(gene, "_PixelClass.png")), width = 10, height = 5)
 }
