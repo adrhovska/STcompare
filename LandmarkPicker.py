@@ -4,6 +4,7 @@ import argparse
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
+default_dir = Path("/Users/adrhovska/Desktop/STdata/STcompare_code")
 
 # argument parsing 
 def parse_args():
@@ -12,8 +13,22 @@ def parse_args():
     parser.add_argument("--image2", required=True, help="Reference tissue_hires_image.png")
     parser.add_argument("--sample_aligned", required=True, help="Source sample name")
     parser.add_argument("--sample_reference", required=True, help="Reference sample name")
-    parser.add_argument( "--project_dir", default="/Users/adrhovska/Desktop/STdata/STcompare_code", help="Main project directory")
+    parser.add_argument("--project_dir", default=default_dir, type=Path)
     return parser.parse_args()
+
+# clicking one landmark point from one image
+def click_landmark(img, title):
+    # creating and displaying window for the img 
+    fig, ax = plt.subplots(figsize=(10, 10))
+    ax.imshow(img)
+    ax.set_title(title)
+    # matplotlib returns coordinates as x, y
+    clicked = plt.ginput(1, timeout=0)[0]
+    plt.close(fig)
+    # storing clicked coordinates, first x then y 
+    x, y = clicked
+    # returning y first because this is needed for further analysis like this
+    return y, x
 
 def main():
     # reading terminal arguments and converting image/project paths from text strings to objects 
@@ -35,20 +50,16 @@ def main():
     # point storage
     points1 = []
     points2 = []
-    # defining the number of landmarks (usually around 6 to 10, pick corners/sides and centre)
-    n_points = int(input("Choose amount of landmark points (usually 6 to 10): "))
+    # defining the number of landmarks, usually around 6 to 10
+    n_points = int(input("Choose amount of landmark points, usually 6 to 10: "))
     # looping over landmark pairs 
     for i in range(n_points):
-        # creating and displaying window for the img 
-        fig, ax = plt.subplots(figsize=(10, 10))
-        ax.imshow(img1)
-        ax.set_title(f"{args.sample_aligned}/source: click landmark {i + 1}")
-        # matplotlib returns coordinates as x, y
-        clicked = plt.ginput(1, timeout=0)[0]
-        plt.close(fig)
-        # storing clicked coordinates, first x then y 
-        x1, y1 = clicked
-        # saving points as dictionary with y first (needed for further analysis like this)
+        # clicking landmark on source image
+        y1, x1 = click_landmark(
+            img1,
+            f"{args.sample_aligned}/source: click landmark {i + 1}",
+        )
+        # saving points as dictionary with y first
         points1.append(
             {
                 "landmark": i + 1,
@@ -56,14 +67,12 @@ def main():
                 "x": x1,
             }
         )
-        # the same for second img --> might be siplified into one ?
-        fig, ax = plt.subplots(figsize=(10, 10))
-        ax.imshow(img2)
-        ax.set_title(f"{args.sample_reference}/reference: click matching landmark {i + 1}")
-        clicked = plt.ginput(1, timeout=0)[0]
-        plt.close(fig)
-
-        x2, y2 = clicked
+        # clicking matching landmark on reference image
+        y2, x2 = click_landmark(
+            img2,
+            f"{args.sample_reference}/reference: click matching landmark {i + 1}",
+        )
+        # saving matching reference point as dictionary with y first
         points2.append(
             {
                 "landmark": i + 1,
