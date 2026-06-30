@@ -59,10 +59,12 @@ dir.create(dir_comparison, showWarnings = FALSE, recursive = TRUE)
 # 3. create further subdirectories
 output_names <- list()
 output_dirs <- c("Results", "Coordinate_QC", "Raster_Plots", "Correlation_Plots", "Linear_Regression", "Pixel_Class")
+output_dirs <- setNames(
+  file.path(dir_comparison, output_names),
+  output_names
+)
 for (d in output_names) {
-  file_path <- file.path(dir_comparison, d)
-  dir.create(file_path, showWarnings = FALSE, recursive = TRUE)
-  output_names[[d]] <- file_path
+  dir.create(output_dirs[[d]], showWarnings = FALSE, recursive = TRUE)
 }
 
 # defining genes of interest (from Supplementary material Extended Data Figure 8 b))

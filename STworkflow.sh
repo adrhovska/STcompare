@@ -3,66 +3,83 @@ set -euo pipefail
 
 ## User settings
 # conda setup
+set +u
 source "$(conda info --base)/etc/profile.d/conda.sh"
+set -u
+
 # conda environments
-py_env="stalign_clean"
-r_env="r_env"
+PY_ENV="stalign_clean"
+R_ENV="r_env"
 
 # project folder
-script_dir="$(cd "$(dirname "${bash_source[0]}")" && pwd)"
-project_dir="$(pwd)"
-skip_landmarks=0
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(pwd)"
+
+# help message
+usage() {
+  echo "Usage:"
+  echo "  ./STworkflow.sh \\"
+  echo "    --source_dir SOURCE_10X_FOLDER \\"
+  echo "    --reference_dir REFERENCE_10X_FOLDER \\"
+  echo "    --sample_aligned SOURCE_SAMPLE_NAME \\"
+  echo "    --sample_reference REFERENCE_SAMPLE_NAME"
+  echo ""
+  echo "Optional:"
+  echo "  --project_dir PROJECT_FOLDER"
+  echo "  --script_dir TOOL_SCRIPT_FOLDER"
+  echo "  --py_env PYTHON_CONDA_ENV"
+  echo "  --r_env R_CONDA_ENV"
+  echo "  --counts1 SOURCE_COUNTS_FILE"
+  echo "  --counts2 REFERENCE_COUNTS_FILE"
+  echo "  --spatial2 REFERENCE_SPATIAL_FOLDER"
+}
 
 # parse arguments
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --source_dir)
-      source_dir="$2"
+      SOURCE_DIR="$2"
       shift 2
       ;;
     --reference_dir)
-      reference_dir="$2"
+      REFERENCE_DIR="$2"
       shift 2
       ;;
     --sample_aligned)
-      sample_aligned="$2"
+      SAMPLE_ALIGNED="$2"
       shift 2
       ;;
     --sample_reference)
-      sample_reference="$2"
+      SAMPLE_REFERENCE="$2"
       shift 2
       ;;
     --project_dir)
-      project_dir="$2"
+      PROJECT_DIR="$2"
       shift 2
       ;;
     --script_dir)
-      script_dir="$2"
+      SCRIPT_DIR="$2"
       shift 2
       ;;
     --py_env)
-      py_env="$2"
+      PY_ENV="$2"
       shift 2
       ;;
     --r_env)
-      r_env="$2"
+      R_ENV="$2"
       shift 2
       ;;
     --counts1)
-      counts1="$2"
+      COUNTS1="$2"
       shift 2
       ;;
     --counts2)
-      counts2="$2"
+      COUNTS2="$2"
       shift 2
       ;;
     --spatial2)
-      spatial2="$2"
+      SPATIAL2="$2"
       shift 2
-      ;;
-    --skip_landmarks)
-      skip_landmarks=1
-      shift 1
       ;;
     -h|--help)
       usage
@@ -77,50 +94,59 @@ while [[ $# -gt 0 ]]; do
 done
 
 # check required arguments
-if [[ -z "${source_dir:-}" ]]; then
+if [[ -z "${SOURCE_DIR:-}" ]]; then
   echo "Missing required argument: --source_dir"
   usage
   exit 1
 fi
 
-if [[ -z "${reference_dir:-}" ]]; then
+if [[ -z "${REFERENCE_DIR:-}" ]]; then
   echo "Missing required argument: --reference_dir"
   usage
   exit 1
 fi
 
-if [[ -z "${sample_aligned:-}" ]]; then
+if [[ -z "${SAMPLE_ALIGNED:-}" ]]; then
   echo "Missing required argument: --sample_aligned"
   usage
   exit 1
 fi
 
-if [[ -z "${sample_reference:-}" ]]; then
+if [[ -z "${SAMPLE_REFERENCE:-}" ]]; then
   echo "Missing required argument: --sample_reference"
   usage
   exit 1
 fi
 
 # derived paths
-landmark_picker="${script_dir}/LandmarkPicker.py"
-stalign_script="${script_dir}/STalignCode.py"
-stcompare_script="${script_dir}/STcompare.R"
-source_image="${source_dir}/spatial/tissue_hires_image.png"
-reference_image="${reference_dir}/spatial/tissue_hires_image.png"
-source_pos="${source_dir}/spatial/tissue_positions.csv"
-reference_pos="${reference_dir}/spatial/tissue_positions.csv"
-source_scale="${source_dir}/spatial/scalefactors_json.json"
-reference_scale="${reference_dir}/spatial/scalefactors_json.json"
-counts1="${counts1:-${source_dir}/filtered_feature_bc_matrix.h5}"
-counts2="${counts2:-${reference_dir}/filtered_feature_bc_matrix.h5}"
-spatial2="${spatial2:-${reference_dir}/spatial}"
-pair_name="${sample_aligned}_paired_to_${sample_reference}"
-landmark_dir="${project_dir}/landmarks/${pair_name}"
-stalign_outdir="${project_dir}/STalign_outputs/${pair_name}"
-stcompare_outdir="${project_dir}/STcompare_outputs/${pair_name}"
-points1="${landmark_dir}/${sample_aligned}_points.csv"
-points2="${landmark_dir}/${sample_reference}_points.csv"
-aligned_pos="${stalign_outdir}/${sample_aligned}_aligned_to_${sample_reference}_barcodes.csv"
+LANDMARK_PICKER="${SCRIPT_DIR}/LandmarkPicker.py"
+STALIGN_SCRIPT="${SCRIPT_DIR}/STalignCode.py"
+STCOMPARE_SCRIPT="${SCRIPT_DIR}/STcompare.R"
+
+SOURCE_IMAGE="${SOURCE_DIR}/spatial/tissue_hires_image.png"
+REFERENCE_IMAGE="${REFERENCE_DIR}/spatial/tissue_hires_image.png"
+
+SOURCE_POS="${SOURCE_DIR}/spatial/tissue_positions.csv"
+REFERENCE_POS="${REFERENCE_DIR}/spatial/tissue_positions.csv"
+
+SOURCE_SCALE="${SOURCE_DIR}/spatial/scalefactors_json.json"
+REFERENCE_SCALE="${REFERENCE_DIR}/spatial/scalefactors_json.json"
+
+COUNTS1="${COUNTS1:-${SOURCE_DIR}/filtered_feature_bc_matrix.h5}"
+COUNTS2="${COUNTS2:-${REFERENCE_DIR}/filtered_feature_bc_matrix.h5}"
+SPATIAL2="${SPATIAL2:-${REFERENCE_DIR}/spatial}"
+
+LANDMARK_PAIR_NAME="${SAMPLE_ALIGNED}_paired_to_${SAMPLE_REFERENCE}"
+ALIGN_PAIR_NAME="${SAMPLE_ALIGNED}_aligned_to_${SAMPLE_REFERENCE}"
+
+LANDMARK_DIR="${PROJECT_DIR}/landmarks/${LANDMARK_PAIR_NAME}"
+STALIGN_OUTDIR="${PROJECT_DIR}/STalign_outputs/${ALIGN_PAIR_NAME}"
+STCOMPARE_OUTDIR="${PROJECT_DIR}/STcompare_outputs/${ALIGN_PAIR_NAME}"
+
+POINTS1="${LANDMARK_DIR}/${SAMPLE_ALIGNED}_points.csv"
+POINTS2="${LANDMARK_DIR}/${SAMPLE_REFERENCE}_points.csv"
+
+ALIGNED_POS="${STALIGN_OUTDIR}/${SAMPLE_ALIGNED}_aligned_to_${SAMPLE_REFERENCE}_barcodes.csv"
 
 # helper checks
 need_file() {
@@ -135,50 +161,85 @@ need_dir() {
     exit 1
   fi
 }
-## Workflow
-## Workflow
 
-# 1: LandmarkPicker.py
-  echo "Step 1: Running LandmarkPicker.py"
-  echo "Click matching landmarks when the images open."
-  conda activate "$py_env"
-  python "$landmark_picker" \
-    --image1 "$source_image" \
-    --image2 "$reference_image" \
-    --sample_aligned "$sample_aligned" \
-    --sample_reference "$sample_reference" \
-    --project_dir "$project_dir"
+# conda activation helpers
+activate_env() {
+  set +u
+  conda activate "$1"
+  set -u
+}
+deactivate_env() {
+  set +u
   conda deactivate
+  set -u
+}
+
+# check tool scripts
+need_file "$LANDMARK_PICKER"
+need_file "$STALIGN_SCRIPT"
+need_file "$STCOMPARE_SCRIPT"
+
+# check input files
+need_dir "$SOURCE_DIR"
+need_dir "$REFERENCE_DIR"
+
+need_file "$SOURCE_IMAGE"
+need_file "$REFERENCE_IMAGE"
+
+need_file "$SOURCE_POS"
+need_file "$REFERENCE_POS"
+
+need_file "$SOURCE_SCALE"
+need_file "$REFERENCE_SCALE"
+
+need_file "$COUNTS1"
+need_file "$COUNTS2"
+need_dir "$SPATIAL2"
+
+## Workflow
+# 1: LandmarkPicker.py
+echo "Step 1: Running LandmarkPicker.py"
+echo "Click matching landmarks"
+activate_env "$PY_ENV"
+python "$LANDMARK_PICKER" \
+  --image1 "$SOURCE_IMAGE" \
+  --image2 "$REFERENCE_IMAGE" \
+  --sample_aligned "$SAMPLE_ALIGNED" \
+  --sample_reference "$SAMPLE_REFERENCE" \
+  --project_dir "$PROJECT_DIR"
+deactivate_env
+
+# check landmark files
+need_file "$POINTS1"
+need_file "$POINTS2"
 
 # 2: STalignCode.py
-  echo "Step 2: Running STalignCode.py"
-  conda activate "$py_env"
-  python "$stalign_script" \
-    --pos1 "$source_pos" \
-    --pos2 "$reference_pos" \
-    --scale1 "$source_scale" \
-    --scale2 "$reference_scale" \
-    --points1 "$points1" \
-    --points2 "$points2" \
-    --sample_aligned "$sample_aligned" \
-    --sample_reference "$sample_reference" \
-    --project_dir "$project_dir"
-  conda deactivate
+echo "Step 2: Running STalignCode.py"
+activate_env "$PY_ENV"
+python "$STALIGN_SCRIPT" \
+  --pos1 "$SOURCE_POS" \
+  --pos2 "$REFERENCE_POS" \
+  --scale1 "$SOURCE_SCALE" \
+  --scale2 "$REFERENCE_SCALE" \
+  --points1 "$POINTS1" \
+  --points2 "$POINTS2" \
+  --sample_aligned "$SAMPLE_ALIGNED" \
+  --sample_reference "$SAMPLE_REFERENCE" \
+  --project_dir "$PROJECT_DIR"
+deactivate_env
 
-
-# step 3: STcompare.R
+# 3: STcompare.R
 echo "Step 3: Running STcompare.R"
-  conda activate "$r_env"
-  Rscript "$stcomapre_script" \
-    --counts1 "$counts1" \
-    --counts2 "$counts2" \
-    --pos1 "$aligned_pos" \
-    --spatial2 "$spatial2" \
-    --outdir "$stcompare_outdir" \
-    --sample_aligned "$sample_aligned" \
-    --sample_reference "$sample_reference"
-  conda deactivate
-
+activate_env "$R_ENV"
+Rscript "$STCOMPARE_SCRIPT" \
+  --counts1 "$COUNTS1" \
+  --counts2 "$COUNTS2" \
+  --pos1 "$ALIGNED_POS" \
+  --spatial2 "$SPATIAL2" \
+  --outdir "$STCOMPARE_OUTDIR" \
+  --sample_aligned "$SAMPLE_ALIGNED" \
+  --sample_reference "$SAMPLE_REFERENCE"
+deactivate_env
 
 echo "Complete :D"
 echo "Project directory:    $PROJECT_DIR"
