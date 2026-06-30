@@ -78,11 +78,13 @@ Python 3.9 and higher
 The following Python packages: pandas, matplotlib (pyplot and image), argparse, pathlib
 LandmarkPicker.py is a self-contained script and can be run by downloading it and passing arguments through the command line, replacing the example paths with file locations:
 
+```text
 python LandmarkPicker.py \
   --image1 /path/to/source_sample/spatial/tissue_hires_image.png \
   --image2 /path/to/reference_sample/spatial/tissue_hires_image.png \
   --sample_aligned SourceSample \
   --sample_reference ReferenceSample
+```
 
 After running the scripts asks the user to select the number of landmark pairs (6 to 10 is recommended), user should input the desired number of pairs. Afterwards the source image opens and the user is left to select the first of the pair, with the reference opening afterwards allowing the user to select the corresponding landmark. Repeat until all landmarks are selected. 
 
