@@ -34,6 +34,7 @@ y,x
 --> For normal H&E landmark picking from tissue_hires_image.png, use: --coord_scale hires (always)
 
 the code thus requires eight arguments, those being: pos1 (CSV source tissue positions), pos2 (CSV reference tissue positions), scale1 (.json source scalefactors), scale2 (.json reference scalefactors), points1 and points2 (source and reference CSV y and x coordinates), sample_aligned (name of source tissue), sample_reference (name of reference tissue)
+
 optional arguments include: project_dir (main project directory where output folders will be created), outdir (optional custom output directory), outname (optional custom name for the aligned barcode CSV), coord_scale (coordinate system used for spot and landmark coordinates, options are hires, lowres, fullres, or um), spot_diameter_um (Visium spot diameter in micrometres; default is 55.0)
 
 ## Outputs
