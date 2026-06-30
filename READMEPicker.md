@@ -23,10 +23,10 @@ After running the scripts asks the user to select the number of landmark pairs (
 
 the code thus requires four arguments, those being: image1 and 2 (.png source and reference hires images), sample_aligned (name of the source sample being aligned), sample_reference (name of the reference sample)
 
-optional arguments include: project_dir (main project directory where the landmark output folder will be created)
+optional arguments include: project_dir (project directory where the landmark output folder will be created if working directory is wished to be overriden by the user)
 
 ## Outputs 
-Outputs are saved in a directory named after the two samples. The directory contains source landmark CSV, reference landmark CSV and combined landmark CSV for QC. For STalignCode.py only the first two are essential, the last one serves as a check whether landmark order has been preserved.
+Outputs are saved in a directory named after the two samples in the project folder (has to be cd'). The directory contains source landmark CSV, reference landmark CSV and combined landmark CSV for QC. For STalignCode.py only the first two are essential, the last one serves as a check whether landmark order has been preserved.
 
 ## Additional Notes and QC
 -- matplotlib records clicked coordinates as x,y, but this script saves them as y,x because that is the coordinate format expected by STalignCode.py
