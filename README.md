@@ -1,3 +1,68 @@
+# STworkflow README
+STworkflow.sh is a bash script which runs the full workflow of comparison of spatial transcriptomic data. It encompasses the LandmarkPicker, STalign and STcompare modules in sequential order. 
+
+This workflow is designed for comparison of two 10x Visium ST tissue sections. It first aligns the source to the reference tissue with manually selected H&E landmarks (LandmarkPicker.py and STalign.py) and then continues with downstream spatial comparison with STcompare.R. 
+
+## Expected input
+Each sample should be a standard 10x Visium output folder containing:
+
+```text
+Sample_ST/
+├── filtered_feature_bc_matrix.h5
+└── spatial/
+    ├── tissue_hires_image.png
+    ├── tissue_positions.csv
+    └── scalefactors_json.json
+```
+
+The workflow assumes the following default files for the two tissues:
+
+SOURCE_DIR/filtered_feature_bc_matrix.h5
+SOURCE_DIR/spatial/tissue_hires_image.png
+SOURCE_DIR/spatial/tissue_positions.csv
+SOURCE_DIR/spatial/scalefactors_json.json
+
+REFERENCE_DIR/filtered_feature_bc_matrix.h5
+REFERENCE_DIR/spatial/tissue_hires_image.png
+REFERENCE_DIR/spatial/tissue_positions.csv
+REFERENCE_DIR/spatial/scalefactors_json.json
+
+## Requirements
+The workflow uses two separate conda environments:
+
+python_env
+r_env
+
+By default:
+- `LandmarkPicker.py` and `STalignCode.py` run in python_env
+- `STcompare.R` runs in r_env
+The default environment names can be changed using:
+```bash
+--py_env PYTHON_CONDA_ENV
+--r_env R_CONDA_ENV
+```
+## Usage
+Make the workflow executable once:
+```bash
+chmod +x STworkflow.sh
+```
+Run the workflow:
+```bash 
+./STworkflow.sh \
+  --source_dir /path/to/source_folder \
+  --reference_dir /path/to/reference_folder \
+  --sample_aligned SourceSample \
+  --sample_reference ReferenceSample
+```
+the code thus requires four arguments, those being: source_dir (path to the source 10x Visium folder, this is the sample being aligned), reference_dir (path to the reference 10x Visium folder, this is the template of the alignment), sample_aligned (name of the aligned sample), sample_reference (name of the reference sample)
+optional arguments include: project_dir (output project directory, default is current working directory), script_dir (directory containing LandmarkPicker.py, STalignCode.py and STcompare.R, default is directory containing STworkflow.sh), py_env (Python conda environment name, default is python_env), r_env (R conda environment, default is r_env), counts1 (custom source count matrix path, default is filtered_feature_bc_matrix.h5), counts2 (custom reference count matrix path, default is REFERENCE_DIR/filtered_feature_bc_matrix.h5), spatial2 (custom reference spatial folder path, default is REFERENCE_DIR/spatial)
+
+## Outputs
+The workflow creates one pair-specific output folder with Landmarks, STalign and STcompare folders. 
+
+-------------------------------------------------------------------------------------------------------------------------------
+The workflow file encompasses the following modules:
+
 # LandmarkPicker
 This Python script is used to manually select matching landmark pairs between two H&E stained images from 10x Visium tissue sections. They are saved as CSV files (y, x) and are designed to be further used for affine transformation in STalignCode.py. 
 

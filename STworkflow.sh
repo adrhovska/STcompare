@@ -8,7 +8,7 @@ source "$(conda info --base)/etc/profile.d/conda.sh"
 set -u
 
 # conda environments
-PY_ENV="stalign_clean"
+PY_ENV="python_env"
 R_ENV="r_env"
 
 # project folder
