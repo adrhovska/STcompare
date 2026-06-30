@@ -1,5 +1,6 @@
-# H&E images are aligned using manually selected landmark pairs
-# then the fitted transform is applied to the Visium spot coordinates
+# H&E images are aligned using manually selected landmark pairs from LandmarkPicker.py
+# affine transform is performed and then applied to 10x Visium spot coordinates
+
 # load required libraries
 from pathlib import Path
 import argparse
@@ -11,61 +12,48 @@ import matplotlib.pyplot as plt
 # make plots bigger
 plt.rcParams["figure.figsize"] = (12, 10)
 # make default project directory
-default_dir = Path("/Users/adrhovska/Desktop/STdata/STcompare_code")
+default_dir = Path.cwd()
+
 # expected tissue_positions.csv columns
-expected_cols = ["barcode", "in_tissue", "array_row", "array_col", "pxl_row_in_fullres", "pxl_col_in_fullres"]
-# reading Visium spot data
+expected_cols = ["barcode", "in_tissue", "array_row", "array_col",
+                 "pxl_row_in_fullres", "pxl_col_in_fullres"]
+# Reader of Visium spot data
+## making required columns numeric while keeping barcodes as strings
 def read_spots(pos_file):
     pos_file = Path(pos_file)
     df = pd.read_csv(pos_file)
     df["barcode"] = df["barcode"].astype(str)
-    numeric_cols = ["in_tissue", "array_row", "array_col", "pxl_row_in_fullres","pxl_col_in_fullres"]
-    # making required columns numeric
+    numeric_cols = ["in_tissue", "array_row", "array_col",
+                    "pxl_row_in_fullres","pxl_col_in_fullres"]
     for col in numeric_cols:
         df[col] = pd.to_numeric(df[col], errors="coerce")
     return df
 
-# reading scale factors
+# Reader of scale factors
+## important is tissue_hires_scalef because has to use high due to landmark choosing
 def read_scalefactors(scale_file):
     scale_file = Path(scale_file)
     with open(scale_file, "r") as f:
         scalefactors = json.load(f)
     return scalefactors
 
-# choosing coordinate multiplier
-def coordinate_factor(scalefactors, coord_scale, spot_diameter_um):
-    if coord_scale == "fullres":
-        return 1.0
-    if coord_scale == "hires":
-        return float(scalefactors["tissue_hires_scalef"])
-    if coord_scale == "lowres":
-        return float(scalefactors["tissue_lowres_scalef"])
-    if coord_scale == "um":
-        if "spot_diameter_fullres" not in scalefactors:
-            raise KeyError( "Could not find 'spot_diameter_fullres' in scalefactors_json.json.")
-        return float(spot_diameter_um) / float(scalefactors["spot_diameter_fullres"])
-    raise ValueError(f"Unknown coord_scale: {coord_scale}")
-
-# adding x and y coordinates in the chosen coordinate system
-def add_xy_coordinates(df, scalefactors, coord_scale="hires", spot_diameter_um=55.0):
+# adding x and y coordinates in hires coordinate system (converts full to high resolution)
+def add_xy_coordinates(df, scalefactors):
     df = df.copy()
-    factor = coordinate_factor(
-        scalefactors=scalefactors,
-        coord_scale=coord_scale,
-        spot_diameter_um=spot_diameter_um,
-    )
+    factor = float(scalefactors["tissue_hires_scalef"])
     df["x"] = df["pxl_col_in_fullres"].astype(float) * factor
     df["y"] = df["pxl_row_in_fullres"].astype(float) * factor
     return df
 
-# keeping only in-tissue spots
+# Filter of spots to only those in tissue --> needed?
 def filter_spots(df):
     df = df.copy()
     df = df[df["in_tissue"].astype(int) == 1].copy()
     df = df.reset_index(drop=True)
     return df
 
-# checking spot table before alignment
+# Spot validation and potential error generation
+## checks whether there are in-tissue spots, no duplicate barcodes, only finite x/y coordinates
 def validate_spots(df, sample_name):
     if df.empty:
         raise ValueError(f"{sample_name}: no in-tissue spots found")
@@ -75,7 +63,7 @@ def validate_spots(df, sample_name):
         raise ValueError(f"{sample_name}: non-finite x/y coordinates found")
     print(f"{sample_name}: {df.shape[0]} in-tissue spots")
     
-# reading manual landmark CSVs
+# Reader of manual landmark point CSVs saved from LandmarkPicker.py
 def read_landmark_points(points_file):
     points_file = Path(points_file)
     df = pd.read_csv(points_file)
@@ -86,8 +74,8 @@ def read_landmark_points(points_file):
         raise ValueError(f"{points_file} contains non-finite landmark coordinates.")
     return points
 
-# fitting affine transform from manual landmark pairs
-def fit_affine_from_landmarks(points1_yx, points2_yx):
+# Fitter of affine transform from manual landmark pairs (translation, rotation, scaling, shearing)
+def fit_affine(points1_yx, points2_yx):
     if points1_yx.shape != points2_yx.shape:
         raise ValueError("Source and reference landmark arrays must have the same shape.")
     if points1_yx.shape[0] < 3:
@@ -106,13 +94,13 @@ def fit_affine_from_landmarks(points1_yx, points2_yx):
     residuals = np.linalg.norm(predicted_xy - reference_xy, axis=1)
     return affine, residuals
 
-# applying affine transform to x and y coordinates
-def apply_affine_to_xy(x, y, affine):
+# applying affine transform to x and y coordinates (transforms source spots)
+def apply_affine(x, y, affine):
     xy_hom = np.column_stack([x, y, np.ones(len(x))])
     transformed_xy = xy_hom @ affine.T
     return transformed_xy[:, 0], transformed_xy[:, 1]
 
-# creating output directory and output paths
+# creating output directory and output paths to files
 def make_output_paths(args):
     project_dir = Path(args.project_dir)
     if args.outdir is None:
@@ -144,7 +132,7 @@ def make_output_paths(args):
         ),
     }
 
-# printing affine quality checks
+# printing affine QCs
 def print_affine_summary(affine, residuals):
     print(affine)
     print(
@@ -157,6 +145,7 @@ def print_affine_summary(affine, residuals):
     print(f"Affine scale singular values: {singular_values}")
     print(f"Affine determinant: {determinant:.4f}")
 
+## Plots (QC)
 # making before-alignment plot
 def make_overlay_plot(src, tgt, outpath, title):
     fig, ax = plt.subplots()
@@ -189,13 +178,13 @@ def make_aligned_overlay_plot(src_out, tgt, outpath, title):
     fig.savefig(outpath, dpi=300)
     plt.close(fig)
 
-# making landmark fit plot
+# making landmark fit plot (reference, source landmarks after transformation and residual lines between them)
 def make_landmark_fit_plot(points1_yx, points2_yx, affine, outpath):
     source_x = points1_yx[:, 1]
     source_y = points1_yx[:, 0]
     reference_x = points2_yx[:, 1]
     reference_y = points2_yx[:, 0]
-    aligned_x, aligned_y = apply_affine_to_xy(source_x, source_y, affine)
+    aligned_x, aligned_y = apply_affine(source_x, source_y, affine)
     fig, ax = plt.subplots()
     ax.scatter(reference_x, reference_y, s=45, label="reference landmarks")
     ax.scatter(aligned_x, aligned_y, s=45, label="source landmarks after affine")
@@ -210,9 +199,9 @@ def make_landmark_fit_plot(points1_yx, points2_yx, affine, outpath):
     fig.savefig(outpath, dpi=300)
     plt.close(fig)
 
-# applying alignment to source spot table
+# applying alignment to source spot table and save
 def align_source_spots(src, affine):
-    aligned_x, aligned_y = apply_affine_to_xy(
+    aligned_x, aligned_y = apply_affine(
         src["x"].to_numpy(),
         src["y"].to_numpy(),
         affine,
@@ -222,26 +211,24 @@ def align_source_spots(src, affine):
     src_out["original_y"] = src_out["y"]
     src_out["aligned_x"] = aligned_x
     src_out["aligned_y"] = aligned_y
-    # x and y become aligned coordinates in the reference coordinate system
+    # x and y become aligned coordinates in the reference coordinate system, overwrite
     src_out["x"] = src_out["aligned_x"]
     src_out["y"] = src_out["aligned_y"]
-
     preferred_cols = ["barcode", "x", "y", "original_x", "original_y", "aligned_x", "aligned_y", "in_tissue", "array_row",
                       "array_col", "pxl_row_in_fullres", "pxl_col_in_fullres"]
     remaining_cols = [c for c in src_out.columns if c not in preferred_cols]
     src_out = src_out[preferred_cols + remaining_cols]
-
     return src_out
 
 # saving affine transform and landmark information
-def save_transform(transform_file, affine, residuals, points1, points2, coord_scale):
+def save_transform(transform_file, affine, residuals, points1, points2):
     np.savez_compressed(
         transform_file,
         affine=affine,
         landmark_residuals=residuals,
         points1=points1,
         points2=points2,
-        coord_scale=coord_scale,
+        coordinate_system="hires",
     )
 
 # argument parsing
@@ -255,48 +242,61 @@ def parse_args():
     parser.add_argument("--points2", required=True, help="Reference manual landmarks CSV with columns y,x")
     parser.add_argument("--project_dir", default=default_dir, type=Path, help="Main project directory where output folders will be created.")
     parser.add_argument("--outdir", default=None, help="Optional custom output directory.")
+    parser.add_argument("--outname", default=None)
     parser.add_argument("--sample_aligned", required=True)
     parser.add_argument("--sample_reference", required=True)
-    parser.add_argument("--outname", default=None)
-    parser.add_argument("--coord_scale", default="hires", choices=["um", "fullres", "hires", "lowres"], help="Coordinate system for spot coordinates and landmark coordinates.")
-    parser.add_argument("--spot_diameter_um", type=float, default=55.0, help="Standard Visium spot diameter is usually 55 um.")
     return parser.parse_args()
 
+# main body using defined functions
 def main():
+    # parsing of arguments and path making
     args = parse_args()
     paths = make_output_paths(args)
+
     # reading source sample
     src_raw = read_spots(args.pos1)
     src_sf = read_scalefactors(args.scale1)
+
     # reading reference sample
     tgt_raw = read_spots(args.pos2)
     tgt_sf = read_scalefactors(args.scale2)
+
     # adding coordinates
-    src = add_xy_coordinates(src_raw, src_sf, coord_scale=args.coord_scale, spot_diameter_um=args.spot_diameter_um,)
-    tgt = add_xy_coordinates(tgt_raw, tgt_sf, coord_scale=args.coord_scale, spot_diameter_um=args.spot_diameter_um)
+    src = add_xy_coordinates(src_raw, src_sf)
+    tgt = add_xy_coordinates(tgt_raw, tgt_sf)
+
     # filtering to in-tissue spots
     src = filter_spots(src)
     tgt = filter_spots(tgt)
+
     # validation
     validate_spots(src, args.sample_aligned)
     validate_spots(tgt, args.sample_reference)
+
     # reading manual landmarks
     points1 = read_landmark_points(args.points1)
     points2 = read_landmark_points(args.points2)
+
     # fitting affine transform
-    affine, residuals = fit_affine_from_landmarks(points1, points2)
+    affine, residuals = fit_affine(points1, points2)
     print_affine_summary(affine, residuals)
+
     # before-alignment plot
     make_overlay_plot(src, tgt, paths["before_plot"], title=f"Before alignment: {args.sample_aligned} vs {args.sample_reference}")
+
     # applying affine transform to source spots
     src_out = align_source_spots(src, affine)
     src_out.to_csv(paths["output_csv"], index=False)
+
     # after-alignment plot
     make_aligned_overlay_plot(src_out, tgt, paths["after_plot"], title=f"After alignment: {args.sample_aligned} aligned to {args.sample_reference}")
+
     # landmark fit plot
     make_landmark_fit_plot(points1, points2, affine, paths["landmark_plot"])
+
     # saving transform file
-    save_transform(paths["transform_file"], affine, residuals, points1, points2, args.coord_scale)
+    # saving transform file
+    save_transform(paths["transform_file"], affine, residuals, points1, points2)
 
 if __name__ == "__main__":
     main()
