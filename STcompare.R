@@ -21,7 +21,7 @@ p <- add_argument(p, "--spatial2", help = "Path to the reference spatial directo
 p <- add_argument(p, "--outdir", help = "Output directory", default = "./STcompare_out")
 p <- add_argument(p, "--scale", help = "Scale type: highres | lowres", default = "hires")
 p <- add_argument(p, "--res", help = "Raster resolution", default = 150L, type = "integer")
-p <- add_argument(p, "--threads", help = "Number of threads", default = 4L,   type = "integer")
+p <- add_argument(p, "--threads", help = "Number of threads", default = 4L, type = "integer")
 p <- add_argument(p, "--sample_aligned", help = "Name of the aligned sample", default = "Sample_1")
 p <- add_argument(p, "--sample_reference", help = "Name of the reference sample", default = "Sample_2")
 # parsing command line arguments
@@ -67,9 +67,11 @@ for (d in output_names) {
 
 # defining genes of interest (from Supplementary material Extended Data Figure 8 b))
 # and unlisting to then allow assignment of tissue type
-genes_of_interest <- list(epithelial_genes = (c("KRT4", "KRT5", "IVL")),
-                          smooth_muscle_genes = (c("SMTN", "CALD1", "CSRP1", "TAGLN")),
-                          skeletal_muscle_genes = (c("TNNC1", "TNNC2", "ACTC1", "MYH8"))) # Have to change downstream
+genes_of_interest <- list(
+  epithelial_genes = (c("KRT4", "KRT5", "IVL")),
+  smooth_muscle_genes = (c("SMTN", "CALD1", "CSRP1", "TAGLN")),
+  skeletal_muscle_genes = (c("TNNC1", "TNNC2", "ACTC1", "MYH8"))
+) # Have to change downstream
 genes_flat <- unlist(genes_of_interest, use.names = FALSE)
 
 ## Reader of aligned positions and Visium positions
@@ -89,7 +91,7 @@ read_positions <- function(path, sample_name, type = "visium", scale_type = "hir
     }
     coord <- data.frame(x = as.numeric(pos$x), y = as.numeric(pos$y), row.names = pos$barcode)
   } else if (type == "visium") {
-    pos_path   <- file.path(path, "tissue_positions.csv")
+    pos_path <- file.path(path, "tissue_positions.csv")
     scale_path <- file.path(path, "scalefactors_json.json")
     pos <- read.csv(pos_path, header = TRUE, row.names = 1, check.names = FALSE, stringsAsFactors = FALSE)
     required_cols <- c("pxl_row_in_fullres", "pxl_col_in_fullres")
@@ -115,9 +117,11 @@ read_positions <- function(path, sample_name, type = "visium", scale_type = "hir
 
 # checking of coordinate system (might be removed, here due to issues with STalign coordinates and printing warnings --> will retain until fix)
 check_coordinate_system <- function(coords1, coords2, sample_aligned_name, sample_reference_name) {
-  ranges <- data.frame(sample = c(sample_aligned_name, sample_reference_name), min_x = c(min(coords1[, "x"]), min(coords2[, "x"])),
-                       max_x = c(max(coords1[, "x"]), max(coords2[, "x"])), min_y = c(min(coords1[, "y"]), min(coords2[, "y"])),
-                       max_y = c(max(coords1[, "y"]), max(coords2[, "y"])))
+  ranges <- data.frame(
+    sample = c(sample_aligned_name, sample_reference_name), min_x = c(min(coords1[, "x"]), min(coords2[, "x"])),
+    max_x = c(max(coords1[, "x"]), max(coords2[, "x"])), min_y = c(min(coords1[, "y"]), min(coords2[, "y"])),
+    max_y = c(max(coords1[, "y"]), max(coords2[, "y"]))
+  )
 
   ranges$width <- ranges$max_x - ranges$min_x
   ranges$height <- ranges$max_y - ranges$min_y
@@ -194,9 +198,11 @@ coords2 <- matched[[sample_reference_name]]$coords
 # filtering genes of interest to those present in both count matrices
 genes_flat <- genes_flat[
   genes_flat %in% rownames(counts1_matched) &
-  genes_flat %in% rownames(counts2_matched)]
-if (length(genes_flat) == 0)
+    genes_flat %in% rownames(counts2_matched)
+]
+if (length(genes_flat) == 0) {
   stop("None of the target genes are present in both count matrices.")
+}
 print(paste("Genes found in both samples:", length(genes_flat)))
 
 # filtering the count matrices to only include the genes of interest
@@ -209,8 +215,11 @@ df_coords <- rbind(
   data.frame(coords2, sample = sample_reference_name)
 )
 # coordinate overlap check plot
-p_overlap <- ggplot(df_coords, aes(x = x, y = y, colour = sample)) + geom_point(size = 0.4, alpha = 0.5) + coord_fixed() +
-theme_minimal() + labs(title = "Coordinate overlap check", x = "x coordinate", y = "y coordinate", colour = "Sample")
+p_overlap <- ggplot(df_coords, aes(x = x, y = y, colour = sample)) +
+  geom_point(size = 0.4, alpha = 0.5) +
+  coord_fixed() +
+  theme_minimal() +
+  labs(title = "Coordinate overlap check", x = "x coordinate", y = "y coordinate", colour = "Sample")
 ggsave(file.path(output_dirs[["Coordinate_QC"]], "Coordinate_QC.png"), p_overlap, width = 7, height = 6, dpi = 200)
 
 ## Object building
@@ -261,7 +270,7 @@ spatial_pad <- argv$res * 2
 shared_xlim <- c(min(all_x) - spatial_pad, max(all_x) + spatial_pad)
 shared_ylim <- c(min(all_y) - spatial_pad, max(all_y) + spatial_pad)
 coord_label <- paste(argv$scale, "scale")
-expr_label  <- "rasterised raw counts"
+expr_label <- "rasterised raw counts"
 
 ## Builder of shared gene limits for raster plots
 # rasterised values may differ between samples, finding the shared limits for each gene across both samples needed to ensure consistent color scaling in the plots
@@ -290,11 +299,10 @@ get_shared_gene_lims <- function(rastList, gene, assay_name, name1, name2) {
 # @expr_label: legend label describing the expression values (e.g. "rasterised raw counts")
 
 make_single_raster <- function(rast, name, gene, gene_limits, rast_assay, shared_xlim, shared_ylim, coord_label, expr_label) {
-  plotRaster(rast, assay_name = rast_assay, feature_name = gene, plotTitle = paste(name, "-", gene)
-  ) + scale_fill_viridis_c(limits = gene_limits, oob = scales::squish, name = paste0(gene, "\n", expr_label)
-  ) + coord_sf(xlim = shared_xlim, ylim = shared_ylim, expand = FALSE, clip = "off") + labs(
-      x = paste("x coordinate (", coord_label, ")"),
-      y = paste("y coordinate (", coord_label, ")")) + theme(plot.margin = margin(10, 10, 10, 10))
+  plotRaster(rast, assay_name = rast_assay, feature_name = gene, plotTitle = paste(name, "-", gene)) + scale_fill_viridis_c(limits = gene_limits, oob = scales::squish, name = paste0(gene, "\n", expr_label)) + coord_sf(xlim = shared_xlim, ylim = shared_ylim, expand = FALSE, clip = "off") + labs(
+    x = paste("x coordinate (", coord_label, ")"),
+    y = paste("y coordinate (", coord_label, ")")
+  ) + theme(plot.margin = margin(10, 10, 10, 10))
 }
 ## Joiner of raster plots for a single gene across two samples
 # creates a side-by-side patchwork plot with a shared fill scale for comparability
@@ -323,13 +331,22 @@ save_plot <- function(plot, path, width, height) {
 }
 for (gene in genes_flat) {
   if (gene %in% genes_in_sc) {
-    save_plot(make_raster_pair(gene, rastList, rast_assay, sample_aligned_name, sample_reference_name,
-                               shared_xlim, shared_ylim, coord_label, expr_label),
-              file.path(output_dirs[["Raster_Plots"]], paste0(gene, "_Raster.png")), width = 11, height = 5.5)
+    save_plot(
+      make_raster_pair(
+        gene, rastList, rast_assay, sample_aligned_name, sample_reference_name,
+        shared_xlim, shared_ylim, coord_label, expr_label
+      ),
+      file.path(output_dirs[["Raster_Plots"]], paste0(gene, "_Raster.png")),
+      width = 11, height = 5.5
+    )
     save_plot(plotCorrelationGeneExp(rastList, sc, gene),
-              file.path(output_dirs[["Correlation_Plots"]], paste0(gene, "_Correlation.png")), width = 10, height = 5)
+      file.path(output_dirs[["Correlation_Plots"]], paste0(gene, "_Correlation.png")),
+      width = 10, height = 5
+    )
   }
   save_plot(linearRegression(input = ss, gene = gene),
-            file.path(output_dirs[["Linear_Regression"]], paste0(gene, "_LinearRegression.png")), width = 10, height = 5)
+    file.path(output_dirs[["Linear_Regression"]], paste0(gene, "_LinearRegression.png")),
+    width = 10, height = 5
+  )
   save_plot(pixelClass(input = ss, gene = gene), file.path(output_dirs[["Pixel_Class"]], paste0(gene, "_PixelClass.png")), width = 10, height = 5)
 }
