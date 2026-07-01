@@ -205,6 +205,8 @@ need_file "$POINTS2"
 echo "Step 2: Running STalignCode.py"
 activate_env "$PY_ENV"
 python "$STALIGN_SCRIPT" \
+  --image1 "$SOURCE_IMAGE" \
+  --image2 "$REFERENCE_IMAGE" \
   --pos1 "$SOURCE_POS" \
   --pos2 "$REFERENCE_POS" \
   --scale1 "$SOURCE_SCALE" \
@@ -214,7 +216,8 @@ python "$STALIGN_SCRIPT" \
   --sample_aligned "$SAMPLE_ALIGNED" \
   --sample_reference "$SAMPLE_REFERENCE" \
   --project_dir "$RUN_DIR" \
-  --outdir "$STALIGN_OUTDIR"
+  --outdir "$STALIGN_OUTDIR" \
+  --alignment_method stalign
 deactivate_env
 
 # check aligned coordinate file
