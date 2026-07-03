@@ -1,8 +1,22 @@
 #!/bin/bash
 
-## User settings
+## User settings --> fix environments 
 
-# conda environments
+# conda environments setup and activation
+
+set +u
+source "$(conda info --base)/etc/profile.d/conda.sh"
+set -u
+
+activate_env() {
+  local env_name="$1"
+  conda activate "$env_name"
+}
+
+deactivate_env() {
+  conda deactivate
+}
+
 PY_ENV="python_env" # must be overwritten if user has different naming convention
 R_ENV="r_env"
 
