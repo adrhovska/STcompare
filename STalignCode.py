@@ -114,8 +114,8 @@ def make_output_paths(args):
             f"{args.sample_reference}_barcodes.csv"
         )
     else:
-        outname = args.outname
-    return {
+        outname = args.outname 
+    d = { # conventional way
         "outdir": outdir,
         "output_csv": outdir / outname,
         "before_plot": outdir / (
@@ -131,6 +131,7 @@ def make_output_paths(args):
         f"{args.sample_aligned}_to_{args.sample_reference}_{args.alignment_method}_transform.npz"
         )
     }
+    return d
 
 # printing affine QCs
 def print_affine_summary(affine, residuals):
@@ -193,7 +194,7 @@ def make_landmark_fit_plot(points1_yx, points2_yx, affine, outpath):
     fig.savefig(outpath, dpi=300)
     plt.close(fig)
 
-# applying alignment to source spot table and save
+# applying alignment to source spot table and save ## perhaps move earlier 
 def align_source_spots(src, affine):
     aligned_x, aligned_y = apply_affine(
         src["x"].to_numpy(),
@@ -335,7 +336,7 @@ def make_stalign_landmark_fit_plot(points1_yx, points2_yx, stalign_out, outpath)
         stalign_out["A"],
         points1_yx,
     )
-
+## where is this?
     transformed_yx = to_numpy(transformed_yx)
 
     reference_x = points2_yx[:, 1]
@@ -406,7 +407,7 @@ def parse_args():
     parser.add_argument("--sigmaA", default=1.1, type=float)
     parser.add_argument("--sigmaP", default=20.0, type=float)
     parser.add_argument("--epV", default=100.0, type=float)
-    return parser.parse_args()
+    return parser.parse_args() ## validate as in STcompare?
 
 # main body using defined functions
 def main():
