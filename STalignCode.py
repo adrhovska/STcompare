@@ -9,10 +9,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import torch
-try:
-    from STalign import STalign
-except ImportError:
-    STalign = None
+from STalign import STalign
 
 # make plots bigger
 plt.rcParams["figure.figsize"] = (12, 10)
@@ -67,7 +64,8 @@ def validate_spots(df, sample_name):
     if not np.isfinite(df[["x", "y"]].to_numpy()).all():
         raise ValueError(f"{sample_name}: non-finite x/y coordinates found")
     print(f"{sample_name}: {df.shape[0]} in-tissue spots")
-    
+
+## Affine transformation - pre-processing of the data in order to reduce computational burden on STalign
 # Reader of manual landmark point CSVs saved from LandmarkPicker.py
 def read_landmark_points(points_file):
     points_file = Path(points_file)
@@ -236,37 +234,28 @@ def save_transform(transform_file, affine, residuals, points1, points2):
         coordinate_system="hires",
     )
 
-#######
+##STalign - the module itself building on landmark affine transformation
 # reading H&E image for STalign
 def read_he_image(image_file):
     image_file = Path(image_file)
     img = plt.imread(image_file)
-
     if img.ndim == 2:
         img = np.stack([img, img, img], axis=-1)
-
     if img.shape[-1] == 4:
         img = img[:, :, :3]
-
     img = img.astype(float)
-
     if img.max() > 1:
         img = img / 255.0
-
     return img
 
-
-# preparing H&E image for STalign
+## Preparing H&E image for STalign function
 def prepare_stalign_image(img):
-    # STalign expects channels first: channels, rows, columns
+    # STalign expects: channels, rows, columns
     img = img.transpose(2, 0, 1)
     img = STalign.normalize(img)
-
     y = np.arange(img.shape[1]) * 1.0
     x = np.arange(img.shape[2]) * 1.0
-
     return [y, x], img
-
 
 # converting torch tensors to numpy
 def to_numpy(x):
@@ -274,29 +263,21 @@ def to_numpy(x):
         return x.detach().cpu().numpy()
     return np.asarray(x)
 
-
-# running STalign H&E-to-H&E registration
+# running STalign rasterisation of H&E to H&E img
 def run_stalign_registration(args, points1, points2):
-    if STalign is None:
-        raise ImportError(
-            "STalign is not installed. Install it in python_env or use --alignment_method affine."
-        )
-
     if args.image1 is None or args.image2 is None:
         raise ValueError("--image1 and --image2 are required for --alignment_method stalign.")
-
     device = "cuda:0" if torch.cuda.is_available() else "cpu"
-    print(f"Running STalign on device: {device}")
 
     # reading source and reference H&E images
     img1 = read_he_image(args.image1)
     img2 = read_he_image(args.image2)
 
-    # preparing images for STalign
+    # use function for preparing images for STalign
     xI, I = prepare_stalign_image(img1)
     xJ, J = prepare_stalign_image(img2)
 
-    # LandmarkPicker.py saves y,x, which matches STalign row,column order
+    # no need to flip as LandmarkPicker.py saves y,x, which matches STalign row,column order 
     pointsI = points1
     pointsJ = points2
 
@@ -318,21 +299,12 @@ def run_stalign_registration(args, points1, points2):
         "sigmaP": args.sigmaP,
         "epV": args.epV,
     }
-
-    out = STalign.LDDMM(
-        xI,
-        I,
-        xJ,
-        J,
-        **params,
-    )
-
+    out = STalign.LDDMM(xI, I, xJ, J, **params)
     return out
-
 
 # applying STalign transform to source spot table
 def align_source_spots_stalign(src, stalign_out):
-    # STalign uses row,column order, which is y,x
+    # STalign uses y,x (row, column) as mentioned previously
     source_points_yx = np.stack(
         [
             src["y"].to_numpy(),
@@ -340,21 +312,13 @@ def align_source_spots_stalign(src, stalign_out):
         ],
         axis=1,
     )
-
-    transformed_yx = STalign.transform_points_source_to_target(
-        stalign_out["xv"],
-        stalign_out["v"],
-        stalign_out["A"],
-        source_points_yx,
-    )
-
+    transformed_yx = STalign.transform_points_source_to_target(stalign_out["xv"], stalign_out["v"], stalign_out["A"], source_points_yx)
     transformed_yx = to_numpy(transformed_yx)
 
     src_out = src.copy()
     src_out["original_x"] = src_out["x"]
     src_out["original_y"] = src_out["y"]
 
-    # STalign returns row,column = y,x
     src_out["aligned_y"] = transformed_yx[:, 0]
     src_out["aligned_x"] = transformed_yx[:, 1]
 
@@ -362,26 +326,11 @@ def align_source_spots_stalign(src, stalign_out):
     src_out["x"] = src_out["aligned_x"]
     src_out["y"] = src_out["aligned_y"]
 
-    preferred_cols = [
-        "barcode",
-        "x",
-        "y",
-        "original_x",
-        "original_y",
-        "aligned_x",
-        "aligned_y",
-        "in_tissue",
-        "array_row",
-        "array_col",
-        "pxl_row_in_fullres",
-        "pxl_col_in_fullres",
-    ]
-
+    preferred_cols = ["barcode", "x", "y", "original_x", "original_y", "aligned_x", "aligned_y", "in_tissue", "array_row",
+                        "array_col", "pxl_row_in_fullres", "pxl_col_in_fullres"]
     remaining_cols = [c for c in src_out.columns if c not in preferred_cols]
     src_out = src_out[preferred_cols + remaining_cols]
-
     return src_out
-
 
 # making STalign landmark fit plot
 def make_stalign_landmark_fit_plot(points1_yx, points2_yx, stalign_out, outpath):
@@ -413,18 +362,16 @@ def make_stalign_landmark_fit_plot(points1_yx, points2_yx, stalign_out, outpath)
     ax.invert_yaxis()
     ax.legend()
     ax.set_title(
-        f"STalign landmark fit | mean residual = {residuals.mean():.2f}px"
+        f"STalign landmark fit / mean residual = {residuals.mean():.2f}px"
     )
 
     fig.tight_layout()
     fig.savefig(outpath, dpi=300)
     plt.close(fig)
-
     print(
         f"STalign landmark residuals: mean={residuals.mean():.2f}, "
         f"median={np.median(residuals):.2f}, max={residuals.max():.2f}"
     )
-
 
 # saving STalign transform
 def save_stalign_transform(transform_file, stalign_out, points1, points2):
@@ -439,7 +386,7 @@ def save_stalign_transform(transform_file, stalign_out, points1, points2):
         coordinate_system="hires",
         method="stalign",
     )
-####
+
 # argument parsing
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -497,13 +444,9 @@ def main():
     points2 = read_landmark_points(args.points2)
 
     # before-alignment plot
-    make_overlay_plot(
-        src,
-        tgt,
-        paths["before_plot"],
-        title=f"Before alignment: {args.sample_aligned} vs {args.sample_reference}",
-    )
+    make_overlay_plot(src, tgt, paths["before_plot"], title=f"Before alignment: {args.sample_aligned} vs {args.sample_reference}")
 
+## Affine version 
     if args.alignment_method == "affine":
         # fitting affine transform
         affine, residuals = fit_affine(points1, points2)
@@ -518,6 +461,7 @@ def main():
         # saving affine transform
         save_transform(paths["transform_file"], affine, residuals, points1, points2)
 
+## STalign version
     elif args.alignment_method == "stalign":
         # running STalign H&E-to-H&E registration
         stalign_out = run_stalign_registration(args, points1, points2)
@@ -532,11 +476,11 @@ def main():
         save_stalign_transform(paths["transform_file"], stalign_out, points1, points2)
 
     else:
-        raise ValueError(f"Unknown alignment method: {args.alignment_method}")
+        raise ValueError(f"Other unknown alignment method: {args.alignment_method}")
 
     # saving aligned coordinate file
     src_out.to_csv(paths["output_csv"], index=False)
-
+    
     # after-alignment plot
     make_aligned_overlay_plot(
         src_out,

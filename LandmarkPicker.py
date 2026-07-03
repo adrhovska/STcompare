@@ -4,16 +4,16 @@ import argparse
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
-default_dir = Path.cwd() # default directory is the directory where the script is run but can be overriden
+default_dir = Path.cwd() # default directory is the directory where the script is run but can be overriden 
 
-# argument parsing 
+# argument parsing (use argparse library available online)
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--image1", required=True, help="Source tissue_hires_image.png")
     parser.add_argument("--image2", required=True, help="Reference tissue_hires_image.png")
     parser.add_argument("--sample_aligned", required=True, help="Source sample name")
     parser.add_argument("--sample_reference", required=True, help="Reference sample name")
-    parser.add_argument("--project_dir", default=default_dir, type=Path, help="Output project directory. Defaults to the current working directory.")
+    parser.add_argument("--project_dir", default=default_dir, type=Path, help="Output project directory. Defaults to the current working directory.") # type = Path helps it from returning a string to the path being stored as an object
     return parser.parse_args()
 
 # clicking one landmark point from one image
@@ -40,14 +40,13 @@ def main():
     project_dir = Path(args.project_dir)
 
     # creating alignment and project drectory names 
-    pair_name = f"{args.sample_aligned}_paired_to_{args.sample_reference}"
-    outdir = project_dir / "landmarks" / pair_name
+    outdir = project_dir / "landmarks" 
     outdir.mkdir(parents=True, exist_ok=True)
 
     # output CSVs
     out1 = outdir / f"{args.sample_aligned}_points.csv"
     out2 = outdir / f"{args.sample_reference}_points.csv"
-    out_combined = outdir / f"{pair_name}_landmark_pairs_combined.csv"
+    out_combined = outdir / f"{args.sample_aligned}_and_{args.sample_reference}_landmark_pairs_combined.csv"
 
     # reading imgs into Python
     img1 = mpimg.imread(image1)
@@ -89,10 +88,10 @@ def main():
     # saving as CSVs for further analysis 
     df1[["y", "x"]].to_csv(out1, index=False)
     df2[["y", "x"]].to_csv(out2, index=False)
-    # creates one combined table with both source and reference landmarks for QC
+    # creates one combined table with both source and reference landmarks for QC --> not really needed just QC
     combined = pd.DataFrame(
         {
-            "landmark": df1["landmark"],
+            "landmark": df1["landmark"], # can take from any df
             f"{args.sample_aligned}_y": df1["y"],
             f"{args.sample_aligned}_x": df1["x"],
             f"{args.sample_reference}_y": df2["y"],
@@ -101,9 +100,6 @@ def main():
     )
     # saving and printing directories of saving 
     combined.to_csv(out_combined, index=False)
-    print(f"Source points:    {out1}")
-    print(f"Reference points: {out2}")
-    print(f"Combined file:    {out_combined}")
 
 if __name__ == "__main__":
     main()
