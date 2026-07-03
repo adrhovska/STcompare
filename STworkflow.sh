@@ -1,44 +1,39 @@
 #!/bin/bash
-set -euo pipefail
 
 ## User settings
-# conda setup
-set +u
-source "$(conda info --base)/etc/profile.d/conda.sh"
-set -u
 
 # conda environments
-PY_ENV="python_env"
+PY_ENV="python_env" # must be overwritten if user has different naming convention
 R_ENV="r_env"
 
 # project folder
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(pwd)"
 
-# parse arguments
+# parse arguments (using this and not e.g. getopt bc this one can use longer options and is more readable to the user)
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --source_dir)
+    -sd | --source_dir)
       SOURCE_DIR="$2"
       shift 2
       ;;
-    --reference_dir)
+    -rd | --reference_dir)
       REFERENCE_DIR="$2"
       shift 2
       ;;
-    --sample_aligned)
+    -sa | --sample_aligned)
       SAMPLE_ALIGNED="$2"
       shift 2
       ;;
-    --sample_reference)
+    -sr | --sample_reference)
       SAMPLE_REFERENCE="$2"
       shift 2
       ;;
-    --project_dir)
+    -pd | --project_dir)
       PROJECT_DIR="$2"
       shift 2
       ;;
-    --script_dir)
+    -sc | --script_dir)
       SCRIPT_DIR="$2"
       shift 2
       ;;
@@ -50,15 +45,15 @@ while [[ $# -gt 0 ]]; do
       R_ENV="$2"
       shift 2
       ;;
-    --counts1)
+    -c1 | --counts1)
       COUNTS1="$2"
       shift 2
       ;;
-    --counts2)
+    -c2 | --counts2)
       COUNTS2="$2"
       shift 2
       ;;
-    --spatial2)
+    -s2 | --spatial2)
       SPATIAL2="$2"
       shift 2
       ;;
@@ -67,7 +62,7 @@ while [[ $# -gt 0 ]]; do
       exit 0
       ;;
     *)
-      echo "Unknown option: $1"
+      echo "Unknown option: $1" 
       usage
       exit 1
       ;;
@@ -146,40 +141,6 @@ need_dir() {
     exit 1
   fi
 }
-
-# conda activation helpers
-activate_env() {
-  set +u
-  conda activate "$1"
-  set -u
-}
-deactivate_env() {
-  set +u
-  conda deactivate
-  set -u
-}
-
-# check tool scripts
-need_file "$LANDMARK_PICKER"
-need_file "$STALIGN_SCRIPT"
-need_file "$STCOMPARE_SCRIPT"
-
-# check input files
-need_dir "$SOURCE_DIR"
-need_dir "$REFERENCE_DIR"
-
-need_file "$SOURCE_IMAGE"
-need_file "$REFERENCE_IMAGE"
-
-need_file "$SOURCE_POS"
-need_file "$REFERENCE_POS"
-
-need_file "$SOURCE_SCALE"
-need_file "$REFERENCE_SCALE"
-
-need_file "$COUNTS1"
-need_file "$COUNTS2"
-need_dir "$SPATIAL2"
 
 # create main run directory
 mkdir -p "$RUN_DIR"
