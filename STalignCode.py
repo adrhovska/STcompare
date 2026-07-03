@@ -42,7 +42,6 @@ def read_scalefactors(scale_file):
 
 # adding x and y coordinates in hires coordinate system (converts full to high resolution)
 def add_xy_coordinates(df, scalefactors):
-    df = df.copy()
     factor = float(scalefactors["tissue_hires_scalef"])
     df["x"] = df["pxl_col_in_fullres"].astype(float) * factor
     df["y"] = df["pxl_row_in_fullres"].astype(float) * factor
@@ -50,7 +49,6 @@ def add_xy_coordinates(df, scalefactors):
 
 # Filter of spots to only those in tissue --> good to have
 def filter_spots(df):
-    df = df.copy()
     df = df[df["in_tissue"].astype(int) == 1].copy()
     df = df.reset_index(drop=True)
     return df
@@ -154,7 +152,7 @@ def make_overlay_plot(src, tgt, outpath, title):
     ax.scatter(src["x"], src["y"], s=8, alpha=0.45, label="source")
     ax.scatter(tgt["x"], tgt["y"], s=8, alpha=0.45, label="reference")
     ax.set_aspect("equal")
-    ax.invert_yaxis()
+    ax.invert_yaxis() # key
     ax.legend()
     ax.set_title(title)
     fig.tight_layout()
@@ -255,13 +253,13 @@ def to_numpy(x):
         return x.detach().cpu().numpy()
     return np.asarray(x)
 
-# running STalign rasterisation of H&E to H&E img
+# running STalign registration of H&E to H&E img
 def run_stalign_registration(args, points1, points2):
     if args.image1 is None or args.image2 is None:
         raise ValueError("--image1 and --image2 are required for --alignment_method stalign.")
     if torch.cuda.is_available():
         device = "cuda:0"
-    elif torch.backends.mps.is_available():
+    elif torch.backends.mps.is_available(): # option on mac 
         device = "mps"
     else:
         device = "cpu"
