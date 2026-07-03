@@ -24,7 +24,6 @@ p <- add_argument(p, "--res", help = "Raster resolution", default = 150L, type =
 p <- add_argument(p, "--threads", help = "Number of threads", default = 4L, type = "integer")
 p <- add_argument(p, "--sample_aligned", help = "Name of the aligned sample", default = "Sample_1")
 p <- add_argument(p, "--sample_reference", help = "Name of the reference sample", default = "Sample_2")
-# parsing command line arguments
 argv <- parse_args(p)
 # validating arguments
 required <- c("counts1", "counts2", "pos1", "spatial2")
@@ -65,9 +64,9 @@ for (d in output_names) {
 # defining genes of interest (from Supplementary material Extended Data Figure 8 b))
 # and unlisting to then allow assignment of tissue type
 genes_of_interest <- list(
-  epithelial_genes = (c("KRT4", "KRT5", "IVL")),
-  smooth_muscle_genes = (c("SMTN", "CALD1", "CSRP1", "TAGLN")),
-  skeletal_muscle_genes = (c("TNNC1", "TNNC2", "ACTC1", "MYH8"))
+  epithelial_genes = c("KRT4", "KRT5", "IVL"),
+  smooth_muscle_genes = c("SMTN", "CALD1", "CSRP1", "TAGLN"),
+  skeletal_muscle_genes = c("TNNC1", "TNNC2", "ACTC1", "MYH8")
 ) # Have to change downstream
 genes_flat <- unlist(genes_of_interest, use.names = FALSE)
 
@@ -112,32 +111,6 @@ read_positions <- function(path, sample_name, type = "visium", scale_type = "hir
   return(coord)
 }
 
-# checking of coordinate system (might be removed, here due to issues with STalign coordinates and printing warnings --> will retain until fix)
-check_coordinate_system <- function(coords1, coords2, sample_aligned_name, sample_reference_name) {
-  ranges <- data.frame(
-    sample = c(sample_aligned_name, sample_reference_name), min_x = c(min(coords1[, "x"]), min(coords2[, "x"])),
-    max_x = c(max(coords1[, "x"]), max(coords2[, "x"])), min_y = c(min(coords1[, "y"]), min(coords2[, "y"])),
-    max_y = c(max(coords1[, "y"]), max(coords2[, "y"]))
-  )
-
-  ranges$width <- ranges$max_x - ranges$min_x
-  ranges$height <- ranges$max_y - ranges$min_y
-
-  width_ratio <- max(ranges$width) / min(ranges$width)
-  height_ratio <- max(ranges$height) / min(ranges$height)
-
-  x_overlap <- max(coords1[, "x"]) >= min(coords2[, "x"]) &&
-    max(coords2[, "x"]) >= min(coords1[, "x"])
-  y_overlap <- max(coords1[, "y"]) >= min(coords2[, "y"]) &&
-    max(coords2[, "y"]) >= min(coords1[, "y"])
-  if (!x_overlap || !y_overlap) {
-    print(paste("Coordinate ranges do not overlap, samples are not in the same aligned coordinate space."))
-  }
-  if (width_ratio > 3 || height_ratio > 3) {
-    print(paste("Coordinate ranges differ in scale, one sample may be fullres while the other is hires/lowres."))
-  }
-}
-
 ## Matcher of counts to positions
 # matches the barcodes in the counts matrix to the barcodes in the positions data frame
 # returns a list containing the matched counts matrix and the corresponding coordinates
@@ -148,7 +121,7 @@ check_coordinate_system <- function(coords1, coords2, sample_aligned_name, sampl
 
 match_counts_to_positions <- function(counts, pos, sample_name) {
   exact_common <- intersect(colnames(counts), rownames(pos))
-  print(paste(sample_name, "exact barcode matches:", length(exact_common)))
+  print(paste(sample_name, "exact barcode matches:", length(exact_common))) # might not be needed bc till now always found
   if (length(exact_common) > 0) {
     counts_m <- counts[, exact_common, drop = FALSE]
     pos_m <- pos[exact_common, , drop = FALSE]
@@ -158,14 +131,16 @@ match_counts_to_positions <- function(counts, pos, sample_name) {
     common_key <- intersect(count_key, pos_key)
     print(paste(sample_name, "cleaned barcode matches:", length(common_key)))
     if (length(common_key) == 0) stop(paste("No matching barcodes for", sample_name))
-    count_idx <- match(common_key, count_key)
+    count_idx <- match(common_key, count_key) # subset the cleaned
     pos_idx <- match(common_key, pos_key)
     counts_m <- counts[, count_idx, drop = FALSE]
     pos_m <- pos[pos_idx, , drop = FALSE]
     rownames(pos_m) <- colnames(counts_m)
   }
+  # Building the coordinates matrix for the matched spots
   coords <- cbind(x = as.numeric(pos_m$x), y = as.numeric(pos_m$y))
   rownames(coords) <- rownames(pos_m)
+  # QC
   if (ncol(counts_m) == 0 || nrow(coords) == 0) stop(paste(sample_name, " has zero matched spots."))
   if (!all(is.finite(coords))) stop(paste(sample_name, " has non-finite coordinates."))
   print(paste(sample_name, "final matched spots:", ncol(counts_m)))
@@ -177,7 +152,6 @@ counts1 <- Read10X_h5(argv$counts1)
 counts2 <- Read10X_h5(argv$counts2)
 pos1 <- read_positions(argv$pos1, sample_aligned_name, type = "aligned")
 pos2 <- read_positions(argv$spatial2, sample_reference_name, type = "visium", scale_type = argv$scale)
-check_coordinate_system(pos1, pos2, sample_aligned_name, sample_reference_name)
 samples <- list(
   list(counts = counts1, pos = pos1, name = sample_aligned_name),
   list(counts = counts2, pos = pos2, name = sample_reference_name)
@@ -205,19 +179,6 @@ print(paste("Genes found in both samples:", length(genes_flat)))
 # filtering the count matrices to only include the genes of interest
 counts1_matched <- counts1_matched[genes_flat, , drop = FALSE]
 counts2_matched <- counts2_matched[genes_flat, , drop = FALSE]
-
-# creating a data frame for plotting the overlap of coordinates between the two samples
-df_coords <- rbind(
-  data.frame(coords1, sample = sample_aligned_name),
-  data.frame(coords2, sample = sample_reference_name)
-)
-# coordinate overlap check plot
-p_overlap <- ggplot(df_coords, aes(x = x, y = y, colour = sample)) +
-  geom_point(size = 0.4, alpha = 0.5) +
-  coord_fixed() +
-  theme_minimal() +
-  labs(title = "Coordinate overlap check", x = "x coordinate", y = "y coordinate", colour = "Sample")
-ggsave(file.path(output_dirs[["Coordinate_QC"]], "Coordinate_QC.png"), p_overlap, width = 7, height = 6, dpi = 200)
 
 ## Object building
 # creating SpatialExperiment objects for each sample using the matched counts and coordinates
@@ -252,7 +213,7 @@ assays1 <- assayNames(rastList[[sample_aligned_name]])
 assays2 <- assayNames(rastList[[sample_reference_name]])
 common_assays <- intersect(assays1, assays2)
 if (length(common_assays) == 0) {
-  stop("No shared assay names between rasterised samples.")
+  stop("No shared assay names between rasterised samples.") # should have counts from objectbuilder (could be removed?)
 }
 rast_assay <- if ("counts" %in% common_assays) {
   "counts"
@@ -263,7 +224,7 @@ rast_assay <- if ("counts" %in% common_assays) {
 # defining shared x and y limits for plotting based on the coordinates of both samples
 all_x <- Filter(is.finite, c(coords1[, "x"], coords2[, "x"]))
 all_y <- Filter(is.finite, c(coords1[, "y"], coords2[, "y"]))
-spatial_pad <- argv$res * 2
+spatial_pad <- argv$res * 2 # rasterisation resolution
 shared_xlim <- c(min(all_x) - spatial_pad, max(all_x) + spatial_pad)
 shared_ylim <- c(min(all_y) - spatial_pad, max(all_y) + spatial_pad)
 coord_label <- paste(argv$scale, "scale")
