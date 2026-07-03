@@ -9,10 +9,11 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import torch
-from STalign import STalign
+from STalign import STalign # because the name of the module is the same as of the package 
 
-# make plots bigger
+# make plots bigger uniformly 
 plt.rcParams["figure.figsize"] = (12, 10)
+
 # make default project directory
 default_dir = Path.cwd()
 
@@ -28,7 +29,7 @@ def read_spots(pos_file):
     numeric_cols = ["in_tissue", "array_row", "array_col",
                     "pxl_row_in_fullres","pxl_col_in_fullres"]
     for col in numeric_cols:
-        df[col] = pd.to_numeric(df[col], errors="coerce")
+        df[col] = pd.to_numeric(df[col], errors="raise")
     return df
 
 # Reader of scale factors
@@ -47,7 +48,7 @@ def add_xy_coordinates(df, scalefactors):
     df["y"] = df["pxl_row_in_fullres"].astype(float) * factor
     return df
 
-# Filter of spots to only those in tissue --> needed?
+# Filter of spots to only those in tissue --> good to have
 def filter_spots(df):
     df = df.copy()
     df = df[df["in_tissue"].astype(int) == 1].copy()
@@ -63,9 +64,9 @@ def validate_spots(df, sample_name):
         raise ValueError(f"{sample_name}: duplicate barcodes found")
     if not np.isfinite(df[["x", "y"]].to_numpy()).all():
         raise ValueError(f"{sample_name}: non-finite x/y coordinates found")
-    print(f"{sample_name}: {df.shape[0]} in-tissue spots")
+    print(f"{sample_name}: {df.shape[0]} in-tissue spots") #  is for rows who are barcodes and thus spots 
 
-## Affine transformation - pre-processing of the data in order to reduce computational burden on STalign
+## Affine transformation - reader of pre-processing of the data in order to reduce computational burden on STalign
 # Reader of manual landmark point CSVs saved from LandmarkPicker.py
 def read_landmark_points(points_file):
     points_file = Path(points_file)
@@ -81,8 +82,6 @@ def read_landmark_points(points_file):
 def fit_affine(points1_yx, points2_yx):
     if points1_yx.shape != points2_yx.shape:
         raise ValueError("Source and reference landmark arrays must have the same shape.")
-    if points1_yx.shape[0] < 3:
-        raise ValueError("Need at least 3 landmark pairs to fit an affine transform.")
     # converting y,x to x,y for affine fitting
     source_xy = np.column_stack([points1_yx[:, 1], points1_yx[:, 0]])
     reference_xy = np.column_stack([points2_yx[:, 1], points2_yx[:, 0]])
@@ -93,21 +92,21 @@ def fit_affine(points1_yx, points2_yx):
     coef_y, *_ = np.linalg.lstsq(design, reference_xy[:, 1], rcond=None)
     affine = np.vstack([coef_x, coef_y])
     # checking how well landmarks fit after transform
-    predicted_xy = design @ affine.T
+    predicted_xy = design @ affine.T # applied to source landmarks coords and compares
     residuals = np.linalg.norm(predicted_xy - reference_xy, axis=1)
     return affine, residuals
 
 # applying affine transform to x and y coordinates (transforms source spots)
 def apply_affine(x, y, affine):
     xy_hom = np.column_stack([x, y, np.ones(len(x))])
-    transformed_xy = xy_hom @ affine.T
+    transformed_xy = xy_hom @ affine.T # applied to coordinate matrix  
     return transformed_xy[:, 0], transformed_xy[:, 1]
 
 # creating output directory and output paths to files
 def make_output_paths(args):
     project_dir = Path(args.project_dir)
     if args.outdir is None:
-        outdir = (project_dir/ "STalign_outputs"/ f"{args.sample_aligned}_aligned_to_{args.sample_reference}")
+        outdir = (project_dir/ "STalign_outputs"/ f"{args.sample_aligned}_aligned_to_{args.sample_reference}") # could eb changed to be cwd
     else:
         outdir = Path(args.outdir)
     outdir.mkdir(parents=True, exist_ok=True)
@@ -143,10 +142,10 @@ def print_affine_summary(affine, residuals):
         f"median={np.median(residuals):.2f}, max={residuals.max():.2f}"
     )
     linear_part = affine[:, :2]
-    singular_values = np.linalg.svd(linear_part, compute_uv=False)
-    determinant = np.linalg.det(linear_part)
+    singular_values = np.linalg.svd(linear_part, compute_uv=False) # stretching, should remain similar on both sides, no uv has to be output 
+    determinant = np.linalg.det(linear_part) # positive means no flipping (should be positive, not negative and flipped and not 0 which would be line), ideally around 1 to have preserved orientation
     print(f"Affine scale singular values: {singular_values}")
-    print(f"Affine determinant: {determinant:.4f}")
+    print(f"Affine determinant: {determinant:.2f}")
 
 ## Plots (QC)
 # making before-alignment plot
@@ -166,13 +165,7 @@ def make_overlay_plot(src, tgt, outpath, title):
 def make_aligned_overlay_plot(src_out, tgt, outpath, title):
     fig, ax = plt.subplots()
     ax.scatter(tgt["x"], tgt["y"], s=8, alpha=0.45, label="reference spots")
-    ax.scatter(
-        src_out["aligned_x"],
-        src_out["aligned_y"],
-        s=8,
-        alpha=0.45,
-        label="source spots aligned",
-    )
+    ax.scatter(src_out["aligned_x"], src_out["aligned_y"], s=8, alpha=0.45,label="source spots aligned")
     ax.set_aspect("equal")
     ax.invert_yaxis()
     ax.legend()
@@ -219,8 +212,7 @@ def align_source_spots(src, affine):
     src_out["y"] = src_out["aligned_y"]
     preferred_cols = ["barcode", "x", "y", "original_x", "original_y", "aligned_x", "aligned_y", "in_tissue", "array_row",
                       "array_col", "pxl_row_in_fullres", "pxl_col_in_fullres"]
-    remaining_cols = [c for c in src_out.columns if c not in preferred_cols]
-    src_out = src_out[preferred_cols + remaining_cols]
+    src_out = src_out[preferred_cols]
     return src_out
 
 # saving affine transform and landmark information
@@ -235,25 +227,25 @@ def save_transform(transform_file, affine, residuals, points1, points2):
     )
 
 ##STalign - the module itself building on landmark affine transformation
-# reading H&E image for STalign
+# reading H&E image for STalign and checking the number of channels and rescaling if not on 0-1 scale 
 def read_he_image(image_file):
     image_file = Path(image_file)
     img = plt.imread(image_file)
     if img.ndim == 2:
-        img = np.stack([img, img, img], axis=-1)
+        img = np.stack([img, img, img], axis=-1) # converted greyscale 2D to 3D RGB
     if img.shape[-1] == 4:
-        img = img[:, :, :3]
+        img = img[:, :, :3] # 4th channel with transparency is not needed, only RGB, removed 
     img = img.astype(float)
     if img.max() > 1:
-        img = img / 255.0
+        img = img / 255.0 # potential present cmmon 255 format where 0 i bcgrnd and 25 is white, normalise if needed (no other included --> might)
     return img
 
 ## Preparing H&E image for STalign function
 def prepare_stalign_image(img):
-    # STalign expects: channels, rows, columns
+    # STalign expects: channels, rows, columns (normally channels last)
     img = img.transpose(2, 0, 1)
     img = STalign.normalize(img)
-    y = np.arange(img.shape[1]) * 1.0
+    y = np.arange(img.shape[1]) * 1.0 # generates axes and converts to floats
     x = np.arange(img.shape[2]) * 1.0
     return [y, x], img
 
@@ -267,7 +259,12 @@ def to_numpy(x):
 def run_stalign_registration(args, points1, points2):
     if args.image1 is None or args.image2 is None:
         raise ValueError("--image1 and --image2 are required for --alignment_method stalign.")
-    device = "cuda:0" if torch.cuda.is_available() else "cpu"
+    if torch.cuda.is_available():
+        device = "cuda:0"
+    elif torch.backends.mps.is_available():
+        device = "mps"
+    else:
+        device = "cpu"
 
     # reading source and reference H&E images
     img1 = read_he_image(args.image1)
@@ -305,7 +302,7 @@ def run_stalign_registration(args, points1, points2):
 # applying STalign transform to source spot table
 def align_source_spots_stalign(src, stalign_out):
     # STalign uses y,x (row, column) as mentioned previously
-    source_points_yx = np.stack(
+    source_points_yx = np.stack( # might be unnecessary 
         [
             src["y"].to_numpy(),
             src["x"].to_numpy(),
@@ -319,7 +316,7 @@ def align_source_spots_stalign(src, stalign_out):
     src_out["original_x"] = src_out["x"]
     src_out["original_y"] = src_out["y"]
 
-    src_out["aligned_y"] = transformed_yx[:, 0]
+    src_out["aligned_y"] = transformed_yx[:, 0] # 0 is y remember 
     src_out["aligned_x"] = transformed_yx[:, 1]
 
     # x and y become aligned coordinates in the reference coordinate system
@@ -332,7 +329,7 @@ def align_source_spots_stalign(src, stalign_out):
     src_out = src_out[preferred_cols + remaining_cols]
     return src_out
 
-# making STalign landmark fit plot
+# making STalign fit plot
 def make_stalign_landmark_fit_plot(points1_yx, points2_yx, stalign_out, outpath):
     transformed_yx = STalign.transform_points_source_to_target(
         stalign_out["xv"],
@@ -397,7 +394,7 @@ def parse_args():
     parser.add_argument("--points1", required=True, help="Source manual landmarks CSV with columns y,x")
     parser.add_argument("--points2", required=True, help="Reference manual landmarks CSV with columns y,x")
     parser.add_argument("--project_dir", default=default_dir, type=Path, help="Main project directory where output folders will be created.")
-    parser.add_argument("--outdir", default=None, help="Optional custom output directory.")
+    parser.add_argument("--outdir", default=None)
     parser.add_argument("--outname", default=None)
     parser.add_argument("--sample_aligned", required=True)
     parser.add_argument("--sample_reference", required=True)
