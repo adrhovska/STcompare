@@ -79,7 +79,7 @@ genes_flat <- unlist(genes_of_interest, use.names = FALSE)
 # @scale_type: scale type for Visium positions ("hires" or "lowres")
 
 read_positions <- function(path, sample_name, type = "visium", scale_type = "hires") {
-  if (type == "aligned") {
+  if (type == "aligned") { # source and reference 
     pos <- read.csv(path, header = TRUE, check.names = FALSE, stringsAsFactors = FALSE)
     required_cols <- c("barcode", "x", "y")
     if (!all(required_cols %in% colnames(pos))) {
@@ -126,7 +126,7 @@ match_counts_to_positions <- function(counts, pos, sample_name) {
     counts_m <- counts[, exact_common, drop = FALSE]
     pos_m <- pos[exact_common, , drop = FALSE]
   } else {
-    count_key <- sub("-1$", "", colnames(counts))
+    count_key <- sub("-1$", "", colnames(counts)) # delete
     pos_key <- sub("-1$", "", rownames(pos))
     common_key <- intersect(count_key, pos_key)
     print(paste(sample_name, "cleaned barcode matches:", length(common_key)))

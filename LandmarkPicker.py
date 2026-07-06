@@ -40,7 +40,7 @@ def main():
     project_dir = Path(args.project_dir)
 
     # creating alignment and project drectory names 
-    outdir = project_dir / "landmarks" 
+    outdir = project_dir / "landmarks" / f"{args.sample_aligned}_paired_to_{args.sample_reference}"
     outdir.mkdir(parents=True, exist_ok=True)
 
     # output CSVs

@@ -4,13 +4,17 @@
 
 # conda environments setup and activation
 
-set +u
 source "$(conda info --base)/etc/profile.d/conda.sh"
-set -u
 
 activate_env() {
   local env_name="$1"
   conda activate "$env_name"
+  local status=$?
+
+  if [[ "$status" -ne 0 ]]; then
+    echo "Could not activate conda environment: $env_name" >&2
+    exit 1
+  fi
 }
 
 deactivate_env() {
