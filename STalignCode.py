@@ -155,7 +155,10 @@ def make_output_paths(args):
         ),
        "transform_file": outdir / (
         f"{args.sample_aligned}_to_{args.sample_reference}_{args.alignment_method}_transform.npz"
-        )
+        ),
+        "stalign_lddmm_diagnostic_plot": outdir / (
+        f"{args.sample_aligned}_to_{args.sample_reference}_LDDMM_diagnostic.png"
+),
     }
     return d
 
@@ -365,7 +368,17 @@ def run_stalign_registration(args, points1, points2):
         "epV": args.epV,
     }
     out = STalign.LDDMM(xI, I, xJ, J, **params)
+    print("STalign output keys:", list(out.keys()))
 
+    for key in ["WM", "WB", "WA"]:
+     if key in out:
+        arr = to_numpy(out[key])
+        arr = np.squeeze(arr)
+        print(f"{key} shape:", arr.shape)
+        print(f"{key} min:", np.nanmin(arr))
+        print(f"{key} max:", np.nanmax(arr))
+        print(f"{key} mean:", np.nanmean(arr))
+        print(f"{key} nonzero fraction:", np.mean(arr > 0))
     # keep image inputs/axes because the extra QC plots need them later
     stalign_data = {
         "xI": xI,
@@ -447,8 +460,99 @@ def make_stalign_landmark_fit_plot(points1_yx, points2_yx, stalign_out, outpath)
         f"STalign landmark residuals: mean={residuals.mean():.2f}, "
         f"median={np.median(residuals):.2f}, max={residuals.max():.2f}"
     )
+####
+def make_stalign_lddmm_diagnostic_plot(stalign_data, stalign_out, outpath):
+    xI = stalign_data["xI"]
+    I = stalign_data["I"]
+    xJ = stalign_data["xJ"]
+    J = stalign_data["J"]
+
+    xv = stalign_out["xv"]
+    v = stalign_out["v"]
+    A = stalign_out["A"]
+    WM = stalign_out.get("WM", None)
 
 
+
+    # final transformed source image
+    phiI = STalign.transform_image_source_to_target(
+        xv,
+        v,
+        A,
+        xI,
+        I,
+        xJ,
+    )
+
+    # deformation transform on target grid
+    phii = STalign.build_transform(
+        xv,
+        v,
+        A,
+        XJ=xJ,
+        direction="b",
+    )
+
+    I_plot = image_for_plot(I)
+    J_plot = image_for_plot(J)
+    phiI_plot = image_for_plot(phiI)
+
+    yJ, xJ_axis = xJ
+    extentJ = stalign_extent(xJ)
+
+    # crude residual image: target - transformed source
+    if phiI_plot.ndim == 3 and J_plot.ndim == 3:
+        error_img = np.mean(np.abs(J_plot - phiI_plot), axis=2)
+    else:
+        error_img = np.abs(np.asarray(J_plot) - np.asarray(phiI_plot))
+
+    fig, ax = plt.subplots(2, 3, figsize=(18, 11))
+
+    ax[0, 0].imshow(phiI_plot, extent=extentJ)
+    ax[0, 0].set_title("Space/contrast transformed source")
+
+    ax[0, 1].imshow(J_plot, extent=extentJ)
+    ax[0, 1].set_title("Target")
+
+    ax[0, 2].imshow(error_img, extent=extentJ)
+    ax[0, 2].set_title("Residual error")
+
+    phii_np = to_numpy(phii)
+    if phii_np.ndim >= 3:
+        # approximate deformation magnitude
+        yy, xx = np.meshgrid(yJ, xJ_axis, indexing="ij")
+        deformation_mag = np.sqrt(
+            (phii_np[..., 0] - yy) ** 2 +
+            (phii_np[..., 1] - xx) ** 2
+        )
+        im = ax[1, 0].imshow(deformation_mag, extent=extentJ)
+        ax[1, 0].set_title("Deformation magnitude")
+        fig.colorbar(im, ax=ax[1, 0], fraction=0.046, pad=0.04)
+
+    if WM is not None:
+        WM_np = to_numpy(WM)
+        im = ax[1, 1].imshow(WM_np, extent=extentJ)
+        ax[1, 1].set_title("STalign weights / WM")
+        fig.colorbar(im, ax=ax[1, 1], fraction=0.046, pad=0.04)
+    else:
+        ax[1, 1].axis("off")
+        ax[1, 1].set_title("No WM found")
+
+    ax[1, 2].imshow(phiI_plot, extent=extentJ)
+    if phii_np.ndim >= 3:
+        add_contours(ax[1, 2], xJ_axis, yJ, phii_np[..., 0], n_levels=20)
+        add_contours(ax[1, 2], xJ_axis, yJ, phii_np[..., 1], n_levels=20)
+    ax[1, 2].set_title("Transformed source with deformation grid")
+
+    for a in ax.ravel():
+        a.set_aspect("equal")
+        a.invert_yaxis()
+
+    fig.tight_layout()
+    fig.savefig(outpath, dpi=300)
+    plt.close(fig)
+
+    #### 
 # STalign QC metrics to check
 # For Visium, each row is a spot (not a sc) so WM values are attached to spots as QC information, but the spots are not filtered by default
 def stalign_qc(src_out, stalign_out, stalign_data, wm_threshold=None):
@@ -697,8 +801,6 @@ def make_stalign_wm_qc_plots(src_out, spot_outpath, hist_outpath):
         src_out["aligned_y"],
         c=src_out["stalign_WM_value"],
         s=10,
-        vmin=0,
-        vmax=1,
     )
     ax.set_title("STalign WM values at aligned Visium spot positions")
     ax.set_aspect("equal")
@@ -871,7 +973,11 @@ def main():
                 paths["stalign_wm_spot_plot"],
                 paths["stalign_wm_hist_plot"],
             )
-
+            make_stalign_lddmm_diagnostic_plot(
+                stalign_data,
+                stalign_out,
+                paths["stalign_lddmm_diagnostic_plot"],
+            )
         # saving STalign transform
         save_stalign_transform(paths["transform_file"], stalign_out, points1, points2)
 
