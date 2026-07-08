@@ -9,7 +9,6 @@ source "$(conda info --base)/etc/profile.d/conda.sh"
 activate_env() {
   local env_name="$1"
   conda activate "$env_name"
-# Reader of Visium spot data
   local status=$?
 
   if [[ "$status" -ne 0 ]]; then
@@ -28,6 +27,40 @@ R_ENV="r_env"
 # project folder
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(pwd)"
+
+# define usage to display help message
+usage() {
+  cat << EOF
+Usage: $0 \\
+  --source_dir <path> \\
+  --reference_dir <path> \\
+  --sample_aligned <name> \\
+  --sample_reference <name> \\
+  [--project_dir <path>] \\
+  [--script_dir <path>] \\
+  [--py_env <env>] \\
+  [--r_env <env>] \\
+  [--counts1 <path>] \\
+  [--counts2 <path>] \\
+  [--spatial2 <path>]
+
+Required:
+  --source_dir          Source Space Ranger outs directory
+  --reference_dir       Reference Space Ranger outs directory
+  --sample_aligned      Name of sample being aligned
+  --sample_reference    Name of reference sample
+
+Optional:
+  --project_dir         Project/output directory
+  --script_dir          Directory containing scripts
+  --py_env              Conda Python environment
+  --r_env               Conda R environment
+  --counts1             Source counts h5 file
+  --counts2             Reference counts h5 file
+  --spatial2            Reference spatial directory
+  --help                Show help message
+EOF
+}
 
 # parse arguments (using this and not e.g. getopt bc this one can use longer options and is more readable to the user)
 while [[ $# -gt 0 ]]; do
