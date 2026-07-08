@@ -3,6 +3,8 @@ STworkflow.sh is a bash script which runs the full workflow of comparison of spa
 
 This workflow is designed for comparison of two 10x Visium ST tissue sections. It first aligns the source to the reference tissue with manually selected H&E landmarks (LandmarkPicker.py and STalignCode.py) and then continues with downstream spatial comparison with STcompare.R. 
 
+The STalign parameters should be optimised according to the input samples individually to achieve the best fit. 
+
 ## Expected input
 Each sample should be a standard 10x Visium output folder containing:
 

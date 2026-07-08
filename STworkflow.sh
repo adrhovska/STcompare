@@ -9,6 +9,7 @@ source "$(conda info --base)/etc/profile.d/conda.sh"
 activate_env() {
   local env_name="$1"
   conda activate "$env_name"
+# Reader of Visium spot data
   local status=$?
 
   if [[ "$status" -ne 0 ]]; then

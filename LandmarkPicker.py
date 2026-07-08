@@ -37,6 +37,7 @@ def main():
     args = parse_args()
     image1 = Path(args.image1)
     image2 = Path(args.image2)
+# Reader of Visium spot data
     project_dir = Path(args.project_dir)
 
     # creating alignment and project drectory names 

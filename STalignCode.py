@@ -555,7 +555,7 @@ def make_stalign_lddmm_diagnostic_plot(stalign_data, stalign_out, outpath):
     #### 
 # STalign QC metrics to check
 # For Visium, each row is a spot (not a sc) so WM values are attached to spots as QC information, but the spots are not filtered by default
-def stalign_qc(src_out, stalign_out, stalign_data, wm_threshold=None):
+def stalign_qc(src_out, stalign_out, stalign_data):
     src_out = src_out.copy()
 
     # Total movement from original source coordinates to final target-space coordinates (both affine and LDDMM)
@@ -605,11 +605,9 @@ def stalign_qc(src_out, stalign_out, stalign_data, wm_threshold=None):
                 wm[None].float(),
                 spot_yx_tensor[None].permute(-1, 0, 1).float(),
             )
-            src_out["stalign_WM_value"] = to_numpy(wm_values[0, 0])
-            if wm_threshold is not None:
-                src_out["stalign_WM_pass"] = src_out["stalign_WM_value"] >= wm_threshold
-        except Exception as e:
-            print(f"Could not compute STalign WM values for spots: {e}")
+        except Exception:
+            pass
+
     return src_out
 
 # QC 1: visualize the exact H&E images (ovrelapping) and landmarks given to STalign
@@ -850,16 +848,15 @@ def parse_args():
     parser.add_argument("--image1", default=None, help="Source tissue_hires_image.png")
     parser.add_argument("--image2", default=None, help="Reference tissue_hires_image.png")
     parser.add_argument("--alignment_method", default="stalign", choices=["affine", "stalign"], help="Alignment method: affine or stalign.")
-    parser.add_argument("--niter", default=300, type=int, help="STalign iterations.")
+    parser.add_argument("--niter", default=500, type=int, help="STalign iterations.")
     parser.add_argument("--diffeo_start", default=100, type=int, help="Iteration when nonlinear deformation starts.")
-    parser.add_argument("--sigmaM", default=1.5, type=float)
-    parser.add_argument("--sigmaB", default=1.0, type=float)
-    parser.add_argument("--sigmaA", default=1.1, type=float)
-    parser.add_argument("--sigmaP", default=20.0, type=float)
-    parser.add_argument("--epV", default=100.0, type=float)
+    parser.add_argument("--sigmaM", default=0.18, type=float)
+    parser.add_argument("--sigmaB", default=0.18, type=float)
+    parser.add_argument("--sigmaA", default=0.18, type=float)
+    parser.add_argument("--sigmaP", default=2e-1, type=float)
+    parser.add_argument("--epV", default=5e1, type=float)
     parser.add_argument("--skip_stalign_qc", action="store_true", help="Skip extra STalign QC plots.")
     parser.add_argument("--stalign_grid_levels", default=20, type=int, help="Number of contour levels for the deformation-grid QC plot.")
-    parser.add_argument("--wm_threshold", default=None, type=float, help="Optional WM threshold saved as stalign_WM_pass; the output spots are not filtered.")
     return parser.parse_args() ## validate as in STcompare?
 
 # main body using defined functions
@@ -923,7 +920,6 @@ def main():
             src_out,
             stalign_out,
             stalign_data,
-            wm_threshold=args.wm_threshold,
         )
 
         # landmark fit plot
