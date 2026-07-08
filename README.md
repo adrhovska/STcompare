@@ -129,14 +129,13 @@ STcompare/Results/Results_Table.csv. This is a file key for comparison of the sa
 The workflow file encompasses the following modules:
 
 # LandmarkPicker
-This Python script is used to manually select matching landmark pairs between two H&E stained images from 10x Visium tissue sections. They are saved as CSV files (y, x) and are designed to be further used for affine transformation in `STalignCode.py`. 
+This Python script is used to manually select matching landmark pairs between two H&E stained images from 10x Visium tissue sections. They are saved as CSV files (y, x) and are designed to be further used for affine and LDDMM transformation in `STalignCode.py` in the pipeline. 
 
 ## Description
-This code is a command line Python script that opens two H&E images, one source tissue image and one reference tissue image, and allows the user to click matching landmark points between them. For each landmark pair, the script first displays the source image and asks the user to click a landmark. It then displays the reference image and asks the user to click the corresponding matching landmark. This is repeated for the prior selected number of landmark pairs (recommended 6 to 10).
+This code is a command line Python script that opens two H&E images, one source tissue image and one reference tissue image, and allows the user to click matching landmark points between them. For each landmark pair, the script first displays the source image and asks the user to click a landmark. It then closes it and displays the reference image asking the user to click the corresponding matching landmark. This is repeated for the prior selected number of landmark pairs (recommended 6 to 10).
+The landmarks should be chosen on morphological basis, favourably equivalent anatomical features, or alternatively signatures such as indentations, tissue corners, folds, and internal cavities (lumen). They should ideally be spread out throughout the whole tissue section and not clustered in one area. 
 
 The output files are saved in a directory named after the two samples and can be passed directly to `STalignCode.py` using the `--points1` and `--points2` arguments.
-
-landmark reccs: landmark pairs should be matching clear anatomical or structural points of the tissues visible in both H&E images. Such might include tissue corners, adventitia on the outside of the section, folds, holes and indentations, internal structures (lumen). They should ideally be spread out throughout the whole tissue section and not clustered in one area. 
 
 ## Dependencies 
 Python 3.9 and higher
@@ -153,7 +152,7 @@ python LandmarkPicker.py \
   --sample_reference ReferenceSample
 ```
 
-After running the scripts asks the user to select the number of landmark pairs (6 to 10 is recommended), user should input the desired number of pairs. Afterwards the source image opens and the user is left to select the first of the pair, with the reference opening afterwards allowing the user to select the corresponding landmark. Repeat until all landmarks are selected. 
+After running the scripts asks the user to select the number of landmark pairs (6 to 10 is recommended), user should input the desired number of pairs. Afterwards the source image opens and the user is left to select the first of the pair, with the reference opening afterwards following first image closure, allowing the user to select the corresponding landmark. Repeat until all landmark pairs are selected. 
 
 the code thus requires four arguments, those being: 
 ```bash
@@ -166,9 +165,8 @@ optional arguments include:
 ```bash
 --project_dir (project directory where the landmark output folder will be created if working directory is wished to be overridden by the user)
 ```
-
 ## Outputs 
-Outputs are saved in a directory named after the two samples in the project folder (has to be cd'). The directory contains source landmark CSV, reference landmark CSV and combined landmark CSV for QC. For `STalignCode.py` only the first two are essential, the last one serves as a check whether landmark order has been preserved.
+Outputs are saved in a directory named after the two samples in the project folder (has to be cd'). The directory contains source landmark CSV, reference landmark CSV and combined landmark CSV for QC. For `STalignCode.py` only the first two are essential, the last one serves as a check whether landmark order has been preserved (whether landmakr 1 in first tissue corresponds to landmark 1 in secod tissue).
 
 ## Additional Notes and QC
 ```text
