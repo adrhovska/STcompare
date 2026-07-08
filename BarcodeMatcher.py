@@ -19,6 +19,7 @@ def read_barcodes(path):
     barcodes = set()
 
     for line in lines:
+        line = line.strip()
         if not line:
             continue
         barcodes.add(line)
@@ -28,11 +29,11 @@ def read_barcodes(path):
 outdir.mkdir(parents=True, exist_ok=True)
 
 # read the barcodes from the full block
-whole_block_barcodes = read_barcodes(full_block_barcodes)
-
-# read tissue positions from the full block
 positions = pd.read_csv(block_tissue_positions)
 positions["barcode"] = positions["barcode"].astype(str)
+whole_block_barcodes = set(
+    positions.loc[positions["in_tissue"].astype(int) == 1, "barcode"] # make sure that it is in the tissue 
+)
 
 summary = []
 
@@ -71,6 +72,10 @@ for barcode_file in sorted_barcode_folder.glob("*barcodes*"):
         "organoid_id": organoid_id,
         "barcode_file": barcode_file.name,
         "n_sorted_barcodes": len(sorted_barcodes),
+        "n_overlap_with_block": len(overlap),
+        "n_missing_from_block": 0,
+        "n_positions_saved": len(subset),
+        "saved": True,
     })
 
 # save summary
