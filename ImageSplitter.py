@@ -11,14 +11,14 @@ original_hires_image = block_spatial_dir / "tissue_hires_image.png"
 scalefactors_file = block_spatial_dir / "scalefactors_json.json"
 split_positions_dir = Path("/Users/adrhovska/Desktop/Split_Positions_B4")
 outdir = Path("/Users/adrhovska/Desktop/BLOCK4_split_for_alignment")
-margin = 150
+margin = 150 #TODO: maybe smaller?
 
 # read image
 img = Image.open(original_hires_image).convert("RGB")
 img_arr = np.array(img)
 height, width = img_arr.shape[:2]
 
-# read scale factor
+# read hires scale factor
 with open(scalefactors_file, "r") as f:
     scalefactors = json.load(f)
 hires_scale = scalefactors["tissue_hires_scalef"]
@@ -28,9 +28,6 @@ outdir.mkdir(parents=True, exist_ok=True)
 for pos_file in split_positions_dir.glob("*_tissue_positions.csv"):
     organoid_id = pos_file.stem.replace("_tissue_positions", "")
     positions = pd.read_csv(pos_file)
-    if len(positions) == 0:
-        print("Skipping empty file:", pos_file.name)
-        continue
 
 # convert full-resolution coordinates to hires-image coordinates
     x = positions["pxl_col_in_fullres"].astype(float) * hires_scale
@@ -59,4 +56,4 @@ for pos_file in split_positions_dir.glob("*_tissue_positions.csv"):
     # copy scalefactors
     shutil.copy2(scalefactors_file, sample_spatial_dir / "scalefactors_json.json")
 
-    print("Saved:", organoid_id)
+print("Saved:", organoid_id)
