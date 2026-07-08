@@ -1,5 +1,7 @@
-# H&E images are aligned using manually selected landmark pairs from LandmarkPicker.py
-# affine transform is performed and then applied to 10x Visium spot coordinates
+#// H&E images are aligned using manually selected landmark pairs from LandmarkPicker.py using affine transformation and nonlinear STalign/LDDMM transformation
+# there is the possibility to use only affine transformation, but using LDDMM is recommended for better alignment
+# the parameters for LDDMM can be adjusted both in the command line and as defaults here in the code
+# it is recommended to test varying parameters and check the QC plots to see which parameters work best for your data
 
 # load required libraries
 from pathlib import Path
@@ -20,8 +22,9 @@ default_dir = Path.cwd()
 # expected tissue_positions.csv columns
 expected_cols = ["barcode", "in_tissue", "array_row", "array_col",
                  "pxl_row_in_fullres", "pxl_col_in_fullres"]
-# Reader of Visium spot data
-## making required columns numeric while keeping barcodes as strings
+
+#// function reading Visium spot data
+# making required columns numeric while keeping barcodes as strings
 def read_spots(pos_file):
     pos_file = Path(pos_file)
     df = pd.read_csv(pos_file)
@@ -32,28 +35,29 @@ def read_spots(pos_file):
         df[col] = pd.to_numeric(df[col], errors="raise")
     return df
 
-# Reader of scale factors
-## important is tissue_hires_scalef because has to use high due to landmark choosing
+#// function reading scale factors
+# important is tissue_hires_scalef because has to use high due to landmark choosing in LandmarkPicker.py
 def read_scalefactors(scale_file):
     scale_file = Path(scale_file)
     with open(scale_file, "r") as f:
         scalefactors = json.load(f)
     return scalefactors
 
-# adding x and y coordinates in hires coordinate system (converts full to high resolution)
+#// function adding x and y coordinates in hires coordinate system
+# converts full to high resolution for less computational burden
 def add_xy_coordinates(df, scalefactors):
     factor = float(scalefactors["tissue_hires_scalef"])
     df["x"] = df["pxl_col_in_fullres"].astype(float) * factor
     df["y"] = df["pxl_row_in_fullres"].astype(float) * factor
     return df
 
-# Filter of spots to only those in tissue --> good to have
+#// function filtering spots to only those in tissue 
 def filter_spots(df):
     df = df[df["in_tissue"].astype(int) == 1].copy()
     df = df.reset_index(drop=True)
     return df
 
-# Spot validation and potential error generation
+#// function validating spots
 ## checks whether there are in-tissue spots, no duplicate barcodes, only finite x/y coordinates
 def validate_spots(df, sample_name):
     if df.empty:
@@ -64,8 +68,9 @@ def validate_spots(df, sample_name):
         raise ValueError(f"{sample_name}: non-finite x/y coordinates found")
     print(f"{sample_name}: {df.shape[0]} in-tissue spots") #  is for rows who are barcodes and thus spots 
 
-## Affine transformation - reader of pre-processing of the data in order to reduce computational burden on STalign
-# Reader of manual landmark point CSVs saved from LandmarkPicker.py
+## Affine transformation
+#// function reading manual landmark points from CSVs saved from LandmarkPicker.py
+# returns numpy array with y,x coordinates (this order is required for further analysis)
 def read_landmark_points(points_file):
     points_file = Path(points_file)
     df = pd.read_csv(points_file)
@@ -76,31 +81,34 @@ def read_landmark_points(points_file):
         raise ValueError(f"{points_file} contains non-finite landmark coordinates.")
     return points
 
-# Fitter of affine transform from manual landmark pairs (translation, rotation, scaling, shearing)
+#// function fitting affine transformation from source to reference landmarks
+# returns affine matrix and residuals of the fit
+# first converts y, x to x, y for fitting, then adds column of ones to allow transformation
+# fits x and y coordinates separately using least squares
+# returns matrix and residuals for the QC of the fit 
 def fit_affine(points1_yx, points2_yx):
     if points1_yx.shape != points2_yx.shape:
         raise ValueError("Source and reference landmark arrays must have the same shape.")
-    # converting y,x to x,y for affine fitting
+
     source_xy = np.column_stack([points1_yx[:, 1], points1_yx[:, 0]])
     reference_xy = np.column_stack([points2_yx[:, 1], points2_yx[:, 0]])
-    # adding column of ones for affine translation
+  
     design = np.column_stack([source_xy, np.ones(source_xy.shape[0])])
-    # fitting x and y coordinates separately
     coef_x, *_ = np.linalg.lstsq(design, reference_xy[:, 0], rcond=None)
     coef_y, *_ = np.linalg.lstsq(design, reference_xy[:, 1], rcond=None)
     affine = np.vstack([coef_x, coef_y])
-    # checking how well landmarks fit after transform
+  
     predicted_xy = design @ affine.T # applied to source landmarks coords and compares
     residuals = np.linalg.norm(predicted_xy - reference_xy, axis=1)
     return affine, residuals
 
-# applying affine transform to x and y coordinates (transforms source spots)
+#// function applying affine transformation to x and y coordinates (landmarks and source spots)
 def apply_affine(x, y, affine):
     xy_hom = np.column_stack([x, y, np.ones(len(x))])
-    transformed_xy = xy_hom @ affine.T # applied to coordinate matrix  
+    transformed_xy = xy_hom @ affine.T 
     return transformed_xy[:, 0], transformed_xy[:, 1]
 
-# creating output directory and output paths to files
+#// function creating output directory and output paths to files
 def make_output_paths(args):
     project_dir = Path(args.project_dir)
     if args.outdir is None:
@@ -115,7 +123,7 @@ def make_output_paths(args):
         )
     else:
         outname = args.outname 
-    d = { # conventional way
+    d = {
         "outdir": outdir,
         "output_csv": outdir / outname,
         "before_plot": outdir / (
@@ -127,8 +135,6 @@ def make_output_paths(args):
         "landmark_plot": outdir / (
             f"{args.sample_aligned}_to_{args.sample_reference}_manual_landmark_fit.png"
         ),
-        # Extra QC plots for STalign/LDDMM. These are only produced when
-        # --alignment_method stalign is used.
         "stalign_input_qc_plot": outdir / (
             f"{args.sample_aligned}_to_{args.sample_reference}_inputs_landmarks.png"
         ),
@@ -162,7 +168,7 @@ def make_output_paths(args):
     }
     return d
 
-# printing affine QCs
+#// function printing affine matrix and residuals of the fit
 def print_affine_summary(affine, residuals):
     print(affine)
     print(
@@ -170,13 +176,13 @@ def print_affine_summary(affine, residuals):
         f"median={np.median(residuals):.2f}, max={residuals.max():.2f}"
     )
     linear_part = affine[:, :2]
-    singular_values = np.linalg.svd(linear_part, compute_uv=False) # stretching, should remain similar on both sides, no uv has to be output 
-    determinant = np.linalg.det(linear_part) # positive means no flipping (should be positive, not negative and flipped and not 0 which would be line), ideally around 1 to have preserved orientation
+    singular_values = np.linalg.svd(linear_part, compute_uv=False) # stretching, should remain similar on both sides 
+    determinant = np.linalg.det(linear_part) # should be positive, if negative then the image is flipped
     print(f"Affine scale singular values: {singular_values}")
     print(f"Affine determinant: {determinant:.2f}")
 
 ## Plots (QC)
-# making before-alignment plot
+#// function making before-alignment plot
 def make_overlay_plot(src, tgt, outpath, title):
     fig, ax = plt.subplots()
     ax.scatter(src["x"], src["y"], s=8, alpha=0.45, label="source")
@@ -189,7 +195,7 @@ def make_overlay_plot(src, tgt, outpath, title):
     fig.savefig(outpath, dpi=300)
     plt.close(fig)
 
-# making after-alignment plot
+#// function making after-alignment plot
 def make_aligned_overlay_plot(src_out, tgt, outpath, title):
     fig, ax = plt.subplots()
     ax.scatter(tgt["x"], tgt["y"], s=8, alpha=0.45, label="reference spots")
@@ -202,7 +208,8 @@ def make_aligned_overlay_plot(src_out, tgt, outpath, title):
     fig.savefig(outpath, dpi=300)
     plt.close(fig)
 
-# making landmark fit plot (reference, source landmarks after transformation and residual lines between them)
+#// function making landmark fit plot (reference, source landmarks after transformation and residual lines between them)
+# draws residual lines between aligned source landmarks and reference landmarks
 def make_landmark_fit_plot(points1_yx, points2_yx, affine, outpath):
     source_x = points1_yx[:, 1]
     source_y = points1_yx[:, 0]
@@ -212,7 +219,7 @@ def make_landmark_fit_plot(points1_yx, points2_yx, affine, outpath):
     fig, ax = plt.subplots()
     ax.scatter(reference_x, reference_y, s=45, label="reference landmarks")
     ax.scatter(aligned_x, aligned_y, s=45, label="source landmarks after affine")
-    # drawing residual lines between aligned source landmarks and reference landmarks
+
     for x1, y1, x2, y2 in zip(aligned_x, aligned_y, reference_x, reference_y):
         ax.plot([x1, x2], [y1, y2], linewidth=0.8, alpha=0.7)
     ax.set_aspect("equal")
@@ -223,7 +230,7 @@ def make_landmark_fit_plot(points1_yx, points2_yx, affine, outpath):
     fig.savefig(outpath, dpi=300)
     plt.close(fig)
 
-# applying alignment to source spot table and save ## perhaps move earlier 
+#// function applying alignment to source spot table 
 def align_source_spots(src, affine):
     aligned_x, aligned_y = apply_affine(
         src["x"].to_numpy(),
@@ -235,7 +242,7 @@ def align_source_spots(src, affine):
     src_out["original_y"] = src_out["y"]
     src_out["aligned_x"] = aligned_x
     src_out["aligned_y"] = aligned_y
-    # x and y become aligned coordinates in the reference coordinate system, overwrite
+
     src_out["x"] = src_out["aligned_x"]
     src_out["y"] = src_out["aligned_y"]
     preferred_cols = ["barcode", "x", "y", "original_x", "original_y", "aligned_x", "aligned_y", "in_tissue", "array_row",
@@ -243,7 +250,7 @@ def align_source_spots(src, affine):
     src_out = src_out[preferred_cols]
     return src_out
 
-# saving affine transform and landmark information
+#// function saving affine transform and landmark information
 def save_transform(transform_file, affine, residuals, points1, points2):
     np.savez_compressed(
         transform_file,
@@ -254,7 +261,7 @@ def save_transform(transform_file, affine, residuals, points1, points2):
         coordinate_system="hires",
     )
 
-##STalign - the module itself building on landmark affine transformation
+##STalign - nonlinear transformation (LDDMM)
 # reading H&E image for STalign and checking the number of channels and rescaling if not on 0-1 scale 
 def read_he_image(image_file):
     image_file = Path(image_file)
@@ -262,10 +269,10 @@ def read_he_image(image_file):
     if img.ndim == 2:
         img = np.stack([img, img, img], axis=-1) # converted greyscale 2D to 3D RGB
     if img.shape[-1] == 4:
-        img = img[:, :, :3] # 4th channel with transparency is not needed, only RGB, removed 
+        img = img[:, :, :3] # 4th channel is not needed, removed to 3D RGB
     img = img.astype(float)
     if img.max() > 1:
-        img = img / 255.0 # potential present cmmon 255 format where 0 i bcgrnd and 25 is white, normalise if needed (no other included --> might)
+        img = img / 255.0 # might be 8bit and thus require normalisation
     return img
 
 ## Preparing H&E image for STalign function
