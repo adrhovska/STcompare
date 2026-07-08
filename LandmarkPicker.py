@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 default_dir = Path.cwd() # default directory is the directory where the script is run but can be overriden 
 
-# argument parsing (use argparse library available online: https://docs.python.org/3/library/argparse.html)
+#// argument parsing (use argparse library available online: https://docs.python.org/3/library/argparse.html)
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--image1", required=True, help="Source tissue_hires_image.png")
