@@ -1,3 +1,6 @@
+#// BarcodeMatcher.py has been created to split the tissue_positions.csv of each BLOCK file into separate files for each organoid
+# based on the barcodes in the sorted barcode files (pathways are hardcoded and have to be overwritten)
+
 import pandas as pd
 from pathlib import Path
 

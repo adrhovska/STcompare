@@ -1,3 +1,7 @@
+#// ImageSplitter.py can be used to split the hires tissue image
+# and the corresponding tissue positions into separate organoid folders for further analysis (separates organoids)
+# pathways are hardcoded and have to be overwritten
+
 import numpy as np
 import pandas as pd
 from pathlib import Path
