@@ -19,7 +19,6 @@ def read_barcodes(path):
     barcodes = set()
 
     for line in lines:
-        line = line.strip()
         if not line:
             continue
         barcodes.add(line)
@@ -72,10 +71,6 @@ for barcode_file in sorted_barcode_folder.glob("*barcodes*"):
         "organoid_id": organoid_id,
         "barcode_file": barcode_file.name,
         "n_sorted_barcodes": len(sorted_barcodes),
-        "n_overlap_with_block": len(overlap),
-        "n_missing_from_block": 0,
-        "n_positions_saved": len(subset),
-        "saved": True,
     })
 
 # save summary
