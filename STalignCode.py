@@ -17,7 +17,6 @@ from qc_plots import (
     to_numpy,
     make_overlay_plot,
     make_aligned_overlay_plot,
-    make_landmark_fit_plot,
     make_stalign_landmark_fit_plot,
     make_stalign_lddmm_diagnostic_plot,
     make_stalign_input_qc_plot,
@@ -216,6 +215,28 @@ def align_source_spots(src, affine):
                       "array_col", "pxl_row_in_fullres", "pxl_col_in_fullres"]
     src_out = src_out[preferred_cols]
     return src_out
+
+#// function making landmark fit plot (reference, source landmarks after transformation and residual lines between them)
+# draws residual lines between aligned source landmarks and reference landmarks
+def make_landmark_fit_plot(points1_yx, points2_yx, affine, outpath):
+    source_x = points1_yx[:, 1]
+    source_y = points1_yx[:, 0]
+    reference_x = points2_yx[:, 1]
+    reference_y = points2_yx[:, 0]
+    aligned_x, aligned_y = apply_affine(source_x, source_y, affine)
+    fig, ax = plt.subplots()
+    ax.scatter(reference_x, reference_y, s=45, label="reference landmarks")
+    ax.scatter(aligned_x, aligned_y, s=45, label="source landmarks after affine")
+
+    for x1, y1, x2, y2 in zip(aligned_x, aligned_y, reference_x, reference_y):
+        ax.plot([x1, x2], [y1, y2], linewidth=0.8, alpha=0.7)
+    ax.set_aspect("equal")
+    ax.invert_yaxis()
+    ax.legend()
+    ax.set_title("Manual landmark affine fit")
+    fig.tight_layout()
+    fig.savefig(outpath, dpi=300)
+    plt.close(fig)
 
 #// function saving affine transform and landmark information
 def save_transform(transform_file, affine, residuals, points1, points2):

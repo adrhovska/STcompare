@@ -155,6 +155,7 @@ require_arg "${SAMPLE_REFERENCE:-}" "--sample_reference"
 # derived paths
 LANDMARK_PICKER="${SCRIPT_DIR}/LandmarkPicker.py"
 STALIGN_SCRIPT="${SCRIPT_DIR}/STalignCode.py"
+QC_PLOTS_SCRIPT="${SCRIPT_DIR}/STalignQC.py"
 STCOMPARE_SCRIPT="${SCRIPT_DIR}/STcompare.R"
 
 SOURCE_IMAGE="${SOURCE_DIR}/spatial/tissue_hires_image.png"
@@ -227,7 +228,7 @@ need_file "$POINTS2"
 # 2: STalignCode.py
 echo "Step 2: Running STalignCode.py"
 activate_env "$PY_ENV"
-python "$STALIGN_SCRIPT" \
+PYTHONPATH="$SCRIPT_DIR:${PYTHONPATH:-}" python "$STALIGN_SCRIPT" \
   --image1 "$SOURCE_IMAGE" \
   --image2 "$REFERENCE_IMAGE" \
   --pos1 "$SOURCE_POS" \
@@ -269,3 +270,4 @@ echo "Landmarks:            $LANDMARK_DIR"
 echo "Aligned coordinates:  $ALIGNED_POS"
 echo "STalign outputs:      $STALIGN_OUTDIR"
 echo "STcompare outputs:    $STCOMPARE_OUTDIR"
+echo "QC plotting module:   $QC_PLOTS_SCRIPT"
