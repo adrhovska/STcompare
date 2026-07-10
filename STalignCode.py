@@ -157,14 +157,17 @@ def make_output_paths(args):
             f"{args.sample_aligned}_to_{args.sample_reference}_WM_values_on_spots.png"
         ),
         "stalign_wm_hist_plot": outdir / (
-            f"{args.sample_aligned}_to_{args.sample_reference}__WM_values_histogram.png"
+            f"{args.sample_aligned}_to_{args.sample_reference}_WM_values_histogram.png"
         ),
        "transform_file": outdir / (
         f"{args.sample_aligned}_to_{args.sample_reference}_{args.alignment_method}_transform.npz"
         ),
         "stalign_lddmm_diagnostic_plot": outdir / (
         f"{args.sample_aligned}_to_{args.sample_reference}_LDDMM_diagnostic.png"
-),
+        ),
+        "qc_summary_plot": outdir / (
+        f"{args.sample_aligned}_to_{args.sample_reference}_QC_summary_panel.png"
+        ),
     }
     return d
 
@@ -180,33 +183,6 @@ def print_affine_summary(affine, residuals):
     determinant = np.linalg.det(linear_part) # should be positive, if negative then the image is flipped
     print(f"Affine scale singular values: {singular_values}")
     print(f"Affine determinant: {determinant:.2f}")
-
-## Plots (QC)
-#// function making before-alignment plot
-def make_overlay_plot(src, tgt, outpath, title):
-    fig, ax = plt.subplots()
-    ax.scatter(src["x"], src["y"], s=8, alpha=0.45, label="source")
-    ax.scatter(tgt["x"], tgt["y"], s=8, alpha=0.45, label="reference")
-    ax.set_aspect("equal")
-    ax.invert_yaxis() # key
-    ax.legend()
-    ax.set_title(title)
-    fig.tight_layout()
-    fig.savefig(outpath, dpi=300)
-    plt.close(fig)
-
-#// function making after-alignment plot
-def make_aligned_overlay_plot(src_out, tgt, outpath, title):
-    fig, ax = plt.subplots()
-    ax.scatter(tgt["x"], tgt["y"], s=8, alpha=0.45, label="reference spots")
-    ax.scatter(src_out["aligned_x"], src_out["aligned_y"], s=8, alpha=0.45,label="source spots aligned")
-    ax.set_aspect("equal")
-    ax.invert_yaxis()
-    ax.legend()
-    ax.set_title(title)
-    fig.tight_layout()
-    fig.savefig(outpath, dpi=300)
-    plt.close(fig)
 
 #// function making landmark fit plot (reference, source landmarks after transformation and residual lines between them)
 # draws residual lines between aligned source landmarks and reference landmarks
@@ -275,23 +251,27 @@ def read_he_image(image_file):
         img = img / 255.0 # might be 8bit and thus require normalisation
     return img
 
-## Preparing H&E image for STalign function
+## Preparing H&E images
+#// function preparing H&E image for STalign function
+# converts channel-last image to channel-first and normalizes to zero mean and unit variance
+# generates y and x axes for the image in STalign format (y is rows, x is columns)
+# converts to float 
 def prepare_stalign_image(img):
-    # STalign expects: channels, rows, columns (normally channels last)
     img = img.transpose(2, 0, 1)
     img = STalign.normalize(img)
-    y = np.arange(img.shape[1]) * 1.0 # generates axes and converts to floats
+    y = np.arange(img.shape[1]) * 1.0 
     x = np.arange(img.shape[2]) * 1.0
     return [y, x], img
 
-# converting torch tensors to numpy
+#// function converting torch tensors (used internally by STalign) to numpy (used in table code and plots)
+# due to STalign using torch tensors but the rest of the code using numpy arrays
 def to_numpy(x):
     if isinstance(x, torch.Tensor):
         return x.detach().cpu().numpy()
     return np.asarray(x)
 
-# helper for plotting STalign images regardless of whether they are torch tensors,
-# numpy arrays, channel-first, or channel-last arrays
+#// function preparing images for matplotlib plotting 
+# converts to numpy, makes channel-last, squeezes single-channel images and rescales on 0 to 1 range
 def image_for_plot(img):
     arr = to_numpy(img)
     if arr.ndim == 3 and arr.shape[0] in (1, 3, 4):
@@ -307,7 +287,7 @@ def image_for_plot(img):
             arr = (arr - lo) / (hi - lo)
     return arr
 
-# helper for consistent image extents from STalign y,x coordinate axes
+#// function getting the extent of the image for plotting in matplotlib
 def stalign_extent(x_axes):
     try:
         return STalign.extent_from_x(tuple(x_axes))
@@ -315,7 +295,7 @@ def stalign_extent(x_axes):
         y_axis, x_axis = x_axes
         return [x_axis[0], x_axis[-1], y_axis[-1], y_axis[0]]
 
-# robust contour helper so deformation-grid plotting does not crash when values are flat
+#// function converting STalign image and axes to matplotlib format for plotting
 def add_contours(ax, x_axis, y_axis, z, n_levels=20, **kwargs):
     z = to_numpy(z)
     finite = np.isfinite(z)
@@ -328,7 +308,9 @@ def add_contours(ax, x_axis, y_axis, z, n_levels=20, **kwargs):
     X, Y = np.meshgrid(x_axis, y_axis)
     ax.contour(X, Y, z, levels=levels, linewidths=0.5, alpha=0.7, **kwargs)
 
-# running STalign registration of H&E to H&E img
+#// function checking image input for STalign
+# checks that the images are present
+# chooses computation device (GPU if available, otherwise CPU)
 def run_stalign_registration(args, points1, points2):
     if args.image1 is None or args.image2 is None:
         raise ValueError("--image1 and --image2 are required for --alignment_method stalign.")
@@ -337,29 +319,34 @@ def run_stalign_registration(args, points1, points2):
     else:
         device = "cpu"
 
+    ## Affine transformation
+
     # reading source and reference H&E images
     img1 = read_he_image(args.image1)
     img2 = read_he_image(args.image2)
 
-    # use function for preparing images for STalign
+    # xI/J are coordinate arrays for the images (in y and x order)
+    # I/J are actual images in STalign format (normalised and channel-first)
     xI, I = prepare_stalign_image(img1)
     xJ, J = prepare_stalign_image(img2)
 
-    # no need to flip as LandmarkPicker.py saves y,x, which matches STalign row,column order 
+    # pointsI/J are the landmark points in y,x order (STalign requires this order, already saved as such)
     pointsI = points1
     pointsJ = points2
 
     # initial affine from landmarks
+    # L are landmark points in source image, T are landmark points in reference image (target)
     L, T = STalign.L_T_from_points(pointsI, pointsJ)
 
-    # save the initial affine matrix as a plotting QC before nonlinear LDDMM
-    # The notebook visualizes this step before deciding whether LDDMM is needed.
+    # converts L and T to torch tensors (needed for STalign), then calculates initial affine transformation A
     A_init = STalign.to_A(
         torch.as_tensor(to_numpy(L), dtype=torch.float64, device=device),
         torch.as_tensor(to_numpy(T), dtype=torch.float64, device=device),
     )
 
-    # running STalign LDDMM registration
+    ## Non-linear LDDMM transformation
+
+    # parameters for nonlinear STalign/LDDMM (can be adjusted here or in the command line)
     params = {
         "L": L,
         "T": T,
@@ -377,6 +364,8 @@ def run_stalign_registration(args, points1, points2):
     out = STalign.LDDMM(xI, I, xJ, J, **params)
     print("STalign output keys:", list(out.keys()))
 
+    # diagnostic information about STalign weight maps (QC)
+    # WM - matching tissue weight map, WB - background weight map, WA - artefact weight map
     for key in ["WM", "WB", "WA"]:
      if key in out:
         arr = to_numpy(out[key])
@@ -386,7 +375,7 @@ def run_stalign_registration(args, points1, points2):
         print(f"{key} max:", np.nanmax(arr))
         print(f"{key} mean:", np.nanmean(arr))
         print(f"{key} nonzero fraction:", np.mean(arr > 0))
-    # keep image inputs/axes because the extra QC plots need them later
+
     stalign_data = {
         "xI": xI,
         "I": I,
@@ -397,182 +386,40 @@ def run_stalign_registration(args, points1, points2):
     }
     return out, stalign_data
 
-# applying STalign transform to source spot table
+#// function transforming source spots to reference coordinate system using STalign output
 def align_source_spots_stalign(src, stalign_out):
-    # STalign uses y,x (row, column) as mentioned previously
-    source_points_yx = np.stack( # might be unnecessary 
-        [
-            src["y"].to_numpy(),
-            src["x"].to_numpy(),
-        ],
-        axis=1,
-    )
+    source_points_yx = src[["y", "x"]].to_numpy(dtype=float)
     transformed_yx = STalign.transform_points_source_to_target(stalign_out["xv"], stalign_out["v"], stalign_out["A"], source_points_yx)
     transformed_yx = to_numpy(transformed_yx)
 
+# adding transformed coordinates to the df while preserving original coordinates  
     src_out = src.copy()
     src_out["original_x"] = src_out["x"]
     src_out["original_y"] = src_out["y"]
-
-    src_out["aligned_y"] = transformed_yx[:, 0] # 0 is y remember 
+    src_out["aligned_y"] = transformed_yx[:, 0] 
     src_out["aligned_x"] = transformed_yx[:, 1]
-
-    # x and y become aligned coordinates in the reference coordinate system
     src_out["x"] = src_out["aligned_x"]
     src_out["y"] = src_out["aligned_y"]
 
     preferred_cols = ["barcode", "x", "y", "original_x", "original_y", "aligned_x", "aligned_y", "in_tissue", "array_row",
                         "array_col", "pxl_row_in_fullres", "pxl_col_in_fullres"]
+    
     remaining_cols = [c for c in src_out.columns if c not in preferred_cols]
     src_out = src_out[preferred_cols + remaining_cols]
     return src_out
 
-# making STalign fit plot
-def make_stalign_landmark_fit_plot(points1_yx, points2_yx, stalign_out, outpath):
-    transformed_yx = STalign.transform_points_source_to_target(
-        stalign_out["xv"],
-        stalign_out["v"],
-        stalign_out["A"],
-        points1_yx,
-    )
-## where is this?
-    transformed_yx = to_numpy(transformed_yx)
-
-    reference_x = points2_yx[:, 1]
-    reference_y = points2_yx[:, 0]
-
-    aligned_x = transformed_yx[:, 1]
-    aligned_y = transformed_yx[:, 0]
-
-    residuals = np.linalg.norm(transformed_yx - points2_yx, axis=1)
-
-    fig, ax = plt.subplots()
-    ax.scatter(reference_x, reference_y, s=45, label="reference landmarks")
-    ax.scatter(aligned_x, aligned_y, s=45, label="source landmarks after STalign")
-
-    for x1, y1, x2, y2 in zip(aligned_x, aligned_y, reference_x, reference_y):
-        ax.plot([x1, x2], [y1, y2], linewidth=0.8, alpha=0.7)
-
-    ax.set_aspect("equal")
-    ax.invert_yaxis()
-    ax.legend()
-    ax.set_title(
-        f"STalign landmark fit / mean residual = {residuals.mean():.2f}px"
-    )
-
-    fig.tight_layout()
-    fig.savefig(outpath, dpi=300)
-    plt.close(fig)
-    print(
-        f"STalign landmark residuals: mean={residuals.mean():.2f}, "
-        f"median={np.median(residuals):.2f}, max={residuals.max():.2f}"
-    )
-####
-def make_stalign_lddmm_diagnostic_plot(stalign_data, stalign_out, outpath):
-    xI = stalign_data["xI"]
-    I = stalign_data["I"]
-    xJ = stalign_data["xJ"]
-    J = stalign_data["J"]
-
-    xv = stalign_out["xv"]
-    v = stalign_out["v"]
-    A = stalign_out["A"]
-    WM = stalign_out.get("WM", None)
-
-
-
-    # final transformed source image
-    phiI = STalign.transform_image_source_to_target(
-        xv,
-        v,
-        A,
-        xI,
-        I,
-        xJ,
-    )
-
-    # deformation transform on target grid
-    phii = STalign.build_transform(
-        xv,
-        v,
-        A,
-        XJ=xJ,
-        direction="b",
-    )
-
-    I_plot = image_for_plot(I)
-    J_plot = image_for_plot(J)
-    phiI_plot = image_for_plot(phiI)
-
-    yJ, xJ_axis = xJ
-    extentJ = stalign_extent(xJ)
-
-    # crude residual image: target - transformed source
-    if phiI_plot.ndim == 3 and J_plot.ndim == 3:
-        error_img = np.mean(np.abs(J_plot - phiI_plot), axis=2)
-    else:
-        error_img = np.abs(np.asarray(J_plot) - np.asarray(phiI_plot))
-
-    fig, ax = plt.subplots(2, 3, figsize=(18, 11))
-
-    ax[0, 0].imshow(phiI_plot, extent=extentJ)
-    ax[0, 0].set_title("Space/contrast transformed source")
-
-    ax[0, 1].imshow(J_plot, extent=extentJ)
-    ax[0, 1].set_title("Target")
-
-    ax[0, 2].imshow(error_img, extent=extentJ)
-    ax[0, 2].set_title("Residual error")
-
-    phii_np = to_numpy(phii)
-    if phii_np.ndim >= 3:
-        # approximate deformation magnitude
-        yy, xx = np.meshgrid(yJ, xJ_axis, indexing="ij")
-        deformation_mag = np.sqrt(
-            (phii_np[..., 0] - yy) ** 2 +
-            (phii_np[..., 1] - xx) ** 2
-        )
-        im = ax[1, 0].imshow(deformation_mag, extent=extentJ)
-        ax[1, 0].set_title("Deformation magnitude")
-        fig.colorbar(im, ax=ax[1, 0], fraction=0.046, pad=0.04)
-
-    if WM is not None:
-        WM_np = to_numpy(WM)
-        im = ax[1, 1].imshow(WM_np, extent=extentJ)
-        ax[1, 1].set_title("STalign weights / WM")
-        fig.colorbar(im, ax=ax[1, 1], fraction=0.046, pad=0.04)
-    else:
-        ax[1, 1].axis("off")
-        ax[1, 1].set_title("No WM found")
-
-    ax[1, 2].imshow(phiI_plot, extent=extentJ)
-    if phii_np.ndim >= 3:
-        add_contours(ax[1, 2], xJ_axis, yJ, phii_np[..., 0], n_levels=20)
-        add_contours(ax[1, 2], xJ_axis, yJ, phii_np[..., 1], n_levels=20)
-    ax[1, 2].set_title("Transformed source with deformation grid")
-
-    for a in ax.ravel():
-        a.set_aspect("equal")
-        a.invert_yaxis()
-
-    fig.tight_layout()
-    fig.savefig(outpath, dpi=300)
-    plt.close(fig)
-
-    #### 
-# STalign QC metrics to check
-# For Visium, each row is a spot (not a sc) so WM values are attached to spots as QC information, but the spots are not filtered by default
+#// function adding spot-level STalign QC metrics for both affine and LDDMM transformation
 def stalign_qc(src_out, stalign_out, stalign_data):
     src_out = src_out.copy()
 
-    # Total movement from original source coordinates to final target-space coordinates (both affine and LDDMM)
+    # total movement from original source coordinates to final target-space coordinates (both affine and LDDMM)
     src_out["stalign_total_displacement"] = np.sqrt(
         (src_out["aligned_x"] - src_out["original_x"]) ** 2
         + (src_out["aligned_y"] - src_out["original_y"]) ** 2
     )
     src_out["stalign_displacement"] = src_out["stalign_total_displacement"]
 
-    # Movement added by nonlinear LDDMM beyond the initial landmark affine (on top of affine, check for high values)
+    # movement added by nonlinear LDDMM beyond the initial landmark affine (on top of affine, check for high values)
     if "A_init" in stalign_data:
         A_init_np = to_numpy(stalign_data["A_init"])
         source_hom = np.vstack(
@@ -612,12 +459,162 @@ def stalign_qc(src_out, stalign_out, stalign_data):
                 wm[None].float(),
                 spot_yx_tensor[None].permute(-1, 0, 1).float(),
             )
-        except Exception:
-            pass
-
+            src_out["stalign_WM_value"] = to_numpy(wm_values).squeeze()
+        except Exception as e:
+            print(f"Warning: could not sample WM values at aligned spot positions: {e}")
     return src_out
 
-# QC 1: visualize the exact H&E images (ovrelapping) and landmarks given to STalign
+## STalign QC plots 
+
+#// QC1: function making before-alignment plot
+def make_overlay_plot(src, tgt, outpath, title):
+    fig, ax = plt.subplots()
+    ax.scatter(src["x"], src["y"], s=8, alpha=0.45, label="source")
+    ax.scatter(tgt["x"], tgt["y"], s=8, alpha=0.45, label="reference")
+    ax.set_aspect("equal")
+    ax.invert_yaxis() # key
+    ax.legend()
+    ax.set_title(title)
+    fig.tight_layout()
+    fig.savefig(outpath, dpi=300)
+    plt.close(fig)
+
+#// QC2: function making after-alignment plot
+def make_aligned_overlay_plot(src_out, tgt, outpath, title):
+    fig, ax = plt.subplots()
+    ax.scatter(tgt["x"], tgt["y"], s=8, alpha=0.45, label="reference spots")
+    ax.scatter(src_out["aligned_x"], src_out["aligned_y"], s=8, alpha=0.45,label="source spots aligned")
+    ax.set_aspect("equal")
+    ax.invert_yaxis()
+    ax.legend()
+    ax.set_title(title)
+    fig.tight_layout()
+    fig.savefig(outpath, dpi=300)
+    plt.close(fig)
+
+#// QC3: function to generate landmark fit plot (to show how the reference landmarks align to the source landmarks)
+def make_stalign_landmark_fit_plot(points1_yx, points2_yx, stalign_out, outpath):
+    transformed_yx = STalign.transform_points_source_to_target(
+        stalign_out["xv"],
+        stalign_out["v"],
+        stalign_out["A"],
+        points1_yx,
+    )
+
+# making numpy arrays for QC (now in x an y order for plotting)
+    transformed_yx = to_numpy(transformed_yx)
+    reference_x = points2_yx[:, 1]
+    reference_y = points2_yx[:, 0]
+    aligned_x = transformed_yx[:, 1]
+    aligned_y = transformed_yx[:, 0]
+
+# calculate residuals, the distance between transformed and reference point 
+    residuals = np.linalg.norm(transformed_yx - points2_yx, axis=1)
+
+# make the figure (including source and referece landmarks with pair lines/residuals)
+    fig, ax = plt.subplots()
+    ax.scatter(reference_x, reference_y, s=45, label="reference landmarks")
+    ax.scatter(aligned_x, aligned_y, s=45, label="source landmarks after alignment")
+    for x1, y1, x2, y2 in zip(aligned_x, aligned_y, reference_x, reference_y):
+        ax.plot([x1, x2], [y1, y2], linewidth=0.8, alpha=0.7)
+    ax.set_aspect("equal")
+    ax.invert_yaxis() # inverted because top left corner is the start of axis otherwise (y increases down, has to be inverted)
+    ax.legend()
+    ax.set_title(
+        f"STalign landmark fit / mean residual = {residuals.mean():.2f}px"
+    )
+    fig.tight_layout()
+    fig.savefig(outpath, dpi=300)
+    plt.close(fig)
+    print(
+        f"STalign landmark residuals: mean={residuals.mean():.2f}, "
+        f"median={np.median(residuals):.2f}, max={residuals.max():.2f}"
+    )
+
+#// QC4: function for generating LDDMM diagnostic plot 
+# pulls out prepared images and their coordinate systems as well as alignment outputs
+def make_stalign_lddmm_diagnostic_plot(stalign_data, stalign_out, outpath):
+    xI = stalign_data["xI"]
+    I = stalign_data["I"]
+    xJ = stalign_data["xJ"]
+    J = stalign_data["J"]
+    xv = stalign_out["xv"]
+    v = stalign_out["v"]
+    A = stalign_out["A"]
+    WM = stalign_out.get("WM", None)
+
+    # phiI is the generated final transformed source image (affine, nonlinear LDDMM both applied as well as placing into reference coordinate system)
+    phiI = STalign.transform_image_source_to_target(xv, v, A, xI, I, xJ)
+
+    # phii is the coordinate deformation map on the target grid (backward warping used)
+    phii = STalign.build_transform(xv, v, A, XJ=xJ, direction="b")
+
+    # using previously def function to prepare for matplotlib plotting
+    J_plot = image_for_plot(J)
+    phiI_plot = image_for_plot(phiI)
+
+    # make panels use same reference coordinate system 
+    # xJ_axis is used because xJ is used for the whole coordinate system 
+    yJ, xJ_axis = xJ
+    extentJ = stalign_extent(xJ)
+
+    # residual error calculation and plotting (J is target image, phiI is transformed source image)
+    # can handle both greyscale and colored images 
+    if phiI_plot.ndim == 3 and J_plot.ndim == 3:
+        error_img = np.mean(np.abs(J_plot - phiI_plot), axis=2)
+    else:
+        error_img = np.abs(np.asarray(J_plot) - np.asarray(phiI_plot))
+
+    fig, ax = plt.subplots(2, 3, figsize=(18, 11))
+
+    ax[0, 0].imshow(phiI_plot, extent=extentJ)
+    ax[0, 0].set_title("Space/contrast transformed source")
+
+    ax[0, 1].imshow(J_plot, extent=extentJ)
+    ax[0, 1].set_title("Target")
+
+    ax[0, 2].imshow(error_img, extent=extentJ)
+    ax[0, 2].set_title("Residual error")
+
+    phii_np = to_numpy(phii)
+    if phii_np.ndim >= 3:
+
+    # calculation and plotting of approximate deformation magnitude (how much each pixel has moved)
+        yy, xx = np.meshgrid(yJ, xJ_axis, indexing="ij")
+        deformation_mag = np.sqrt(
+            (phii_np[..., 0] - yy) ** 2 +
+            (phii_np[..., 1] - xx) ** 2
+        )
+        im = ax[1, 0].imshow(deformation_mag, extent=extentJ)
+        ax[1, 0].set_title("Deformation magnitude")
+        fig.colorbar(im, ax=ax[1, 0], fraction=0.046, pad=0.04)
+
+    # plotting of WM diagnostic map
+    if WM is not None:
+        WM_np = to_numpy(WM)
+        im = ax[1, 1].imshow(WM_np, extent=extentJ)
+        ax[1, 1].set_title("STalign weights / WM")
+        fig.colorbar(im, ax=ax[1, 1], fraction=0.046, pad=0.04)
+    else:
+        ax[1, 1].axis("off")
+        ax[1, 1].set_title("No WM found")
+
+    # plotting transformed sourcea and deformation grid 
+    ax[1, 2].imshow(phiI_plot, extent=extentJ)
+    if phii_np.ndim >= 3:
+        add_contours(ax[1, 2], xJ_axis, yJ, phii_np[..., 0], n_levels=20)
+        add_contours(ax[1, 2], xJ_axis, yJ, phii_np[..., 1], n_levels=20)
+    ax[1, 2].set_title("Transformed source with deformation grid")
+
+    # formatting all QC plot panels 
+    for a in ax.ravel():
+        a.set_aspect("equal")
+        a.invert_yaxis()
+    fig.tight_layout()
+    fig.savefig(outpath, dpi=300)
+    plt.close(fig)
+
+# QC5: visualize the exact H&E images (ovrelapping) and landmarks given to STalign
 def make_stalign_input_qc_plot(stalign_data, points1_yx, points2_yx, outpath):
     xI = stalign_data["xI"]
     I = stalign_data["I"]
@@ -643,7 +640,7 @@ def make_stalign_input_qc_plot(stalign_data, points1_yx, points2_yx, outpath):
     fig.savefig(outpath, dpi=300)
     plt.close(fig)
 
-# QC 2: affine alignment before LDDMM
+# QC6: affine alignment before LDDMM
 def make_stalign_initial_affine_qc_plot(stalign_data, points1_yx, points2_yx, outpath):
     xI = stalign_data["xI"]
     I = stalign_data["I"]
@@ -683,7 +680,7 @@ def make_stalign_initial_affine_qc_plot(stalign_data, points1_yx, points2_yx, ou
     fig.savefig(outpath, dpi=300)
     plt.close(fig)
 
-# QC 3: compare final deformed source H&E to reference H&E
+# QC7: compare final deformed source H&E to reference H&E
 def make_stalign_deformed_image_qc_plot(stalign_data, stalign_out, outpath):
     xI = stalign_data["xI"]
     I = stalign_data["I"]
@@ -714,7 +711,7 @@ def make_stalign_deformed_image_qc_plot(stalign_data, stalign_out, outpath):
     fig.savefig(outpath, dpi=300)
     plt.close(fig)
 
-# QC 4: plot the nonlinear deformation grid over the final deformed source H&E
+# QC8: plot the nonlinear deformation grid over the final deformed source H&E
 def make_stalign_deformation_grid_qc_plot(stalign_data, stalign_out, points1_yx, points2_yx, outpath, grid_levels=20):
     xI = stalign_data["xI"]
     I = stalign_data["I"]
@@ -760,7 +757,7 @@ def make_stalign_deformation_grid_qc_plot(stalign_data, stalign_out, points1_yx,
     fig.savefig(outpath, dpi=300)
     plt.close(fig)
 
-# QC 5: plot aligned Visium source spots over the reference H&E and reference spots
+# QC9: plot aligned Visium source spots over the reference H&E and reference spots
 def make_stalign_spots_on_target_qc_plot(src_out, tgt, stalign_data, outpath, title):
     xJ = stalign_data["xJ"]
     J = stalign_data["J"]
@@ -777,7 +774,7 @@ def make_stalign_spots_on_target_qc_plot(src_out, tgt, stalign_data, outpath, ti
     fig.savefig(outpath, dpi=300)
     plt.close(fig)
 
-# QC 6: histogram of how far source spots moved after STalign
+# QC10: histogram of how far source spots moved after STalign
 def make_stalign_displacement_histogram(src_out, outpath):
     if "stalign_total_displacement" not in src_out.columns:
         return
@@ -793,7 +790,7 @@ def make_stalign_displacement_histogram(src_out, outpath):
     fig.savefig(outpath, dpi=300)
     plt.close(fig)
 
-# QC 7: WM/matching weights at transformed spot positions --> potentially remove 
+# QC11: WM/matching weights at transformed spot positions --> potentially remove 
 # In the notebook these values are used to remove background single cells. For Visium
 # spots, they are safer as QC annotation unless you explicitly decide a threshold.
 def make_stalign_wm_qc_plots(src_out, spot_outpath, hist_outpath):
@@ -838,7 +835,61 @@ def save_stalign_transform(transform_file, stalign_out, points1, points2):
         method="stalign",
     )
 
-# argument parsing
+#// QCsum: function making one summary panel with all generated QC plots 
+def make_qc_summary_panel(paths, alignment_method, outpath, title=None):
+    qc_order = [
+        ("QC1", "Before alignment", "before_plot", ["affine", "stalign"]),
+        ("QC2", "Input H&E + landmarks", "stalign_input_qc_plot", ["stalign"]),
+        ("QC3", "Initial affine", "stalign_initial_affine_qc_plot", ["stalign"]),
+        ("QC4", "Landmark fit", "landmark_plot", ["affine", "stalign"]),
+        ("QC5", "Deformed source vs reference", "stalign_deformed_image_qc_plot", ["stalign"]),
+        ("QC6", "Deformation grid", "stalign_deformation_grid_qc_plot", ["stalign"]),
+        ("QC7", "Aligned spots on target", "stalign_spots_on_target_qc_plot", ["stalign"]),
+        ("QC8", "Spot displacement histogram", "stalign_displacement_hist_plot", ["stalign"]),
+        ("QC9", "LDDMM diagnostic", "stalign_lddmm_diagnostic_plot", ["stalign"]),
+        ("QC10", "After alignment", "after_plot", ["affine", "stalign"]),
+        ("QC11", "WM values on spots", "stalign_wm_spot_plot", ["stalign"]),
+        ("QC12", "WM value histogram", "stalign_wm_hist_plot", ["stalign"]),
+    ]
+
+    existing_qc = []
+    for qc_number, qc_name, path_key, methods in qc_order:
+        if alignment_method not in methods:
+            continue
+
+        path = paths.get(path_key, None)
+        if path is not None and Path(path).is_file():
+            existing_qc.append((qc_number, qc_name, Path(path)))
+
+    if not existing_qc:
+        print("No QC plots found for summary panel")
+        return
+
+    n_plots = len(existing_qc)
+    ncols = 3
+    nrows = int(np.ceil(n_plots / ncols))
+
+    fig, ax = plt.subplots(nrows, ncols, figsize=(6 * ncols, 5 * nrows))
+
+    ax = np.asarray(ax).ravel()
+
+    for i, (qc_number, qc_name, path) in enumerate(existing_qc):
+        img = plt.imread(path)
+        ax[i].imshow(img)
+        ax[i].axis("off")
+        ax[i].set_title(f"{qc_number}: {qc_name}", fontsize=11)
+
+    for j in range(n_plots, len(ax)):
+        ax[j].axis("off")
+
+    if title is not None:
+        fig.suptitle(title, fontsize=16)
+
+    fig.tight_layout()
+    fig.savefig(outpath, dpi=300, bbox_inches="tight")
+    plt.close(fig)
+
+# argument parsing (using argparse)
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--pos1", required=True, help="Source tissue_positions.csv")
@@ -864,9 +915,8 @@ def parse_args():
     parser.add_argument("--epV", default=5e1, type=float)
     parser.add_argument("--skip_stalign_qc", action="store_true", help="Skip extra STalign QC plots.")
     parser.add_argument("--stalign_grid_levels", default=20, type=int, help="Number of contour levels for the deformation-grid QC plot.")
-    return parser.parse_args() ## validate as in STcompare?
+    return parser.parse_args() 
 
-# main body using defined functions
 def main():
     # parsing of arguments and path making
     args = parse_args()
@@ -932,8 +982,7 @@ def main():
         # landmark fit plot
         make_stalign_landmark_fit_plot(points1, points2, stalign_out, paths["landmark_plot"])
 
-        # extra STalign QC plots adapted from the STalign notebook, but using Visium spots
-        # instead of single-cell centroid/rasterized MERFISH data
+        # STalign QC plots
         if not args.skip_stalign_qc:
             make_stalign_input_qc_plot(
                 stalign_data,
@@ -991,12 +1040,9 @@ def main():
     src_out.to_csv(paths["output_csv"], index=False)
     
     # after-alignment plot
-    make_aligned_overlay_plot(
-        src_out,
-        tgt,
-        paths["after_plot"],
-        title=f"After alignment: {args.sample_aligned} aligned to {args.sample_reference}",
-    )
+    make_aligned_overlay_plot(src_out, tgt, paths["after_plot"], title=f"After alignment: {args.sample_aligned} aligned to {args.sample_reference}")
+    # summary panel 
+    make_qc_summary_panel(paths, args.alignment_method, paths["qc_summary_plot"], title=f"QC summary: {args.sample_aligned} aligned to {args.sample_reference}")
 
 if __name__ == "__main__":
     main()
