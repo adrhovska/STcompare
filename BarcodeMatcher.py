@@ -5,11 +5,11 @@ import pandas as pd
 from pathlib import Path
 
 # hardcode paths to the compared barcodes: BLOCK1
-full_block_barcodes = Path("/Users/adrhovska/Desktop/OCT_BLOCK_4/outs/filtered_feature_bc_matrix/barcodes.tsv")
-block_tissue_positions = Path("/Users/adrhovska/Desktop/OCT_BLOCK_4/outs/spatial/tissue_positions.csv")
+full_block_barcodes = Path("//Users/adrhovska/Desktop/STdata/OCT_BLOCK_1/outs/filtered_feature_bc_matrix/barcodes.tsv")
+block_tissue_positions = Path("/Users/adrhovska/Desktop/STdata/OCT_BLOCK_1/outs/spatial/tissue_positions.csv")
 
 # folder with the complete set of sorted organoid barcode files
-sorted_barcode_folder = Path("/Users/adrhovska/Desktop/OCT_barcodes")
+sorted_barcode_folder = Path("/Users/adrhovska/Desktop/STdata/OCT_barcodes")
 
 # output folder for split tissue-position files
 outdir = Path("/Users/adrhovska/Desktop/Split_Positions")

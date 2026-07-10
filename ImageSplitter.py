@@ -10,11 +10,11 @@ import shutil
 from PIL import Image
 
 # read paths to the directories and files 
-block_spatial_dir = Path("/Users/adrhovska/Desktop/OCT_BLOCK_4/outs/spatial")
+block_spatial_dir = Path("/Users/adrhovska/Desktop/STdata/OCT_BLOCK_1/outs/spatial")
 original_hires_image = block_spatial_dir / "tissue_hires_image.png"
 scalefactors_file = block_spatial_dir / "scalefactors_json.json"
-split_positions_dir = Path("/Users/adrhovska/Desktop/Split_Positions_B4")
-outdir = Path("/Users/adrhovska/Desktop/BLOCK4_split_for_alignment")
+split_positions_dir = Path("/Users/adrhovska/Desktop/Split_Positions_B1")
+outdir = Path("/Users/adrhovska/Desktop/BLOCK1_split_for_alignment")
 margin = 150 #TODO: maybe smaller?
 
 # read image

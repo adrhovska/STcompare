@@ -60,11 +60,11 @@ def main():
     # setting the number of landmarks to choose on the image (3 is the minimum allowed due to affine alignment)
     n_points = int(input("Choose amount of landmark points, usually 6 to 10: "))
     if n_points < 3:
+        raise ValueError("Need at least 3 landmark pairs for affine alignment.")
     # looping over the chosen landmarks and storing the coordinate outputs in the lists (saved as dictionaries) 
     # repeating the same for the second image 
-        y1, x1 = click_landmark(img1, f"{args.sample_aligned}/source: click landmark {i + 1}")
-        raise ValueError("Need at least 3 landmark pairs for affine alignment.")
     for i in range(n_points): 
+        y1, x1 = click_landmark(img1, f"{args.sample_aligned}/source: click landmark {i + 1}")
         points1.append(
             {
                 "landmark": i + 1,

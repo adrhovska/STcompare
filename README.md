@@ -174,6 +174,7 @@ Outputs are saved in a directory named after the two samples in the project fold
 -- in STalignCode.py would be passed as arguments pos1 (source tissue CSV) and pos2 (reference tissue CSV)
 ```
 -------------------------------------------------------------------------------------------------------------------------------
+The following text is expanded description and additional information about each of the modules in the pipeline. 
 
 # STalign
 This Python script aligns one 10x Visium tissue to a reference tissue based on manually selected H&E landmark pairs using `LandmarkPicker.py`. This fitted affine transform is then applied to Visium spot coordinates. 
