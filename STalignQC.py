@@ -387,8 +387,8 @@ def make_stalign_displacement_histogram(src_out, outpath):
     fig.savefig(outpath, dpi=300)
     plt.close(fig)
 
-# QC11: WM/matching weights at transformed spot positions --> potentially remove 
-# In the notebook these values are used to remove background single cells. For Visium
+# QC11: WM/matching weights at transformed spot positions  
+# In the STalign single-cell tutorial these values are used to remove background single cells. For Visium
 # spots, they are safer as QC annotation unless you explicitly decide a threshold.
 def make_stalign_wm_qc_plots(src_out, spot_outpath, hist_outpath):
     if "stalign_WM_value" not in src_out.columns:

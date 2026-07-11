@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 import torch
 from STalign import STalign # because the name of the module is the same as of the package 
 
-from qc_plots import (
+from STalignQC import (
     to_numpy,
     make_overlay_plot,
     make_aligned_overlay_plot,
@@ -328,7 +328,8 @@ def run_stalign_registration(args, points1, points2):
         "sigmaP": args.sigmaP,
         "epV": args.epV,
     }
-    out = STalign.LDDMM(xI, I, xJ, J, **params)
+
+    out = STalign.LDDMM(xI, I, xJ, J, **params) # here is the issue (print the args - might be empty)
     print("STalign output keys:", list(out.keys()))
 
     # diagnostic information about STalign weight maps (QC)
@@ -462,13 +463,13 @@ def parse_args():
     parser.add_argument("--image1", default=None, help="Source tissue_hires_image.png")
     parser.add_argument("--image2", default=None, help="Reference tissue_hires_image.png")
     parser.add_argument("--alignment_method", default="stalign", choices=["affine", "stalign"], help="Alignment method: affine or stalign.")
-    parser.add_argument("--niter", default=500, type=int, help="STalign iterations.")
+    parser.add_argument("--niter", default=1000, type=int, help="STalign iterations.")
     parser.add_argument("--diffeo_start", default=100, type=int, help="Iteration when nonlinear deformation starts.")
-    parser.add_argument("--sigmaM", default=0.18, type=float)
-    parser.add_argument("--sigmaB", default=0.18, type=float)
-    parser.add_argument("--sigmaA", default=0.18, type=float)
-    parser.add_argument("--sigmaP", default=2e-1, type=float)
-    parser.add_argument("--epV", default=5e1, type=float)
+    parser.add_argument("--sigmaM", default=1, type=float)
+    parser.add_argument("--sigmaB", default=2, type=float)
+    parser.add_argument("--sigmaA", default=5, type=float)
+    parser.add_argument("--sigmaP", default=20, type=float)
+    parser.add_argument("--epV", default=1, type=float)
     parser.add_argument("--skip_stalign_qc", action="store_true", help="Skip extra STalign QC plots.")
     parser.add_argument("--stalign_grid_levels", default=20, type=int, help="Number of contour levels for the deformation-grid QC plot.")
     return parser.parse_args() 

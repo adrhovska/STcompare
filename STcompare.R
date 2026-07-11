@@ -248,9 +248,9 @@ get_shared_gene_lims <- function(rastList, gene, assay_name, name1, name2) {
 # @expr_label: legend label describing the expression values (e.g. "rasterised raw counts")
 
 make_single_raster <- function(rast, name, gene, gene_limits, rast_assay, shared_xlim, shared_ylim, coord_label, expr_label) {
-  plotRaster(rast, assay_name = rast_assay, feature_name = gene, plotTitle = paste(name, "-", gene))
-  + scale_fill_viridis_c(limits = gene_limits, oob = scales::squish, name = paste0(gene, "\n", expr_label))
-  + coord_sf(xlim = shared_xlim, ylim = shared_ylim, expand = FALSE, clip = "off") + labs(
+  plotRaster(rast, assay_name = rast_assay, feature_name = gene, plotTitle = paste(name, "-", gene)) + 
+  scale_fill_viridis_c(limits = gene_limits, oob = scales::squish, name = paste0(gene, "\n", expr_label)) + 
+  coord_sf(xlim = shared_xlim, ylim = shared_ylim, expand = FALSE, clip = "off") + labs(
     x = paste("x coordinate (", coord_label, ")"),
     y = paste("y coordinate (", coord_label, ")")
   ) + theme(plot.margin = margin(10, 10, 10, 10))
