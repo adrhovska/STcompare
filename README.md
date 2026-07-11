@@ -216,9 +216,37 @@ y,x
 850.9,300.
 ```
 
-the code thus requires eight arguments, those being: pos1 (CSV source tissue positions), pos2 (CSV reference tissue positions), scale1 (.json source scalefactors), scale2 (.json reference scalefactors), points1 and points2 (source and reference CSV y and x coordinates), sample_aligned (name of source tissue), sample_reference (name of reference tissue)
+the code thus requires **eight arguments**, those being: pos1 (CSV source tissue positions), pos2 (CSV reference tissue positions), scale1 (.json source scalefactors), scale2 (.json reference scalefactors), points1 and points2 (source and reference CSV y and x coordinates), sample_aligned (name of source tissue), sample_reference (name of reference tissue)
 
-optional arguments include: project_dir (main project directory where output folders will be created), outdir (optional custom output directory), outname (optional custom name for the aligned barcode CSV)
+**optional arguments include**: project_dir (main project directory where output folders will be created), outdir (optional custom output directory), outname (optional custom name for the aligned barcode CSV)
+
+## LDDMM parameter guide
+In order for the non-linear fitting to run smoothly the parameters have to be optimised for the samples being compared. The STalign's LDDMM alignment is highly sensitive to the balance between several sigma parameters controlling the matching forces in the process, as well as to the step-size/regularisation parameters controlling how much the deformation can move. If these are disbalanced, not only will the alignment be incorrect but it might also fail entirely (empty output, crashed diagnostic QC plots, etc.)
+
+'- sigmaM: noise standard deviation for the image matching term | Default: 1.0 | Smaller values mean a stronger pull toward matching image intensities between source and target.
+'- sigmaB: noise standard deviation for the background term | Default: 2.0 | The same principle as SigmaM but for bcgrnd, made larger due to the matching of bcgrnd being not as important as that of the tissue.
+'- sigmaA: noise standard deviation for the artifact term | Default: 5.0 | Artefacts have the weakest pull on the fit. Should be kept the largest.
+'- sigmaP: noise standard deviation for landmark point-matching | Default: 20.0 | Controls how strongly the manually clicked landmarks are enforced. Making this too small (e.g. under 1) causes landmarks to pull far too aggressively relative to everything else, which can make the optimisation unstable. 
+'- epV: step size for velocity field updates during optimization | Default: 1.0 | If you see runaway or divergent behavior (NaNs, blown-up deformation), this is usually the first thing to lower to around 1.
+'- niter: total number of optimization iterations | Default: 1000
+'- diffeo_start: the iteration at which LDDMM deformation begins, after an initial affine-only warm-up period | Default: 100.
+
+**Note on parameter choices:** the sigma values act roughly as `1 / sigma²` in the
+optimization's loss function so tightening `sigmaP` by 100x doesn't makes the landmark-matching **10,000x** stronger.
+Therefore beware, that small changes to these values have an outsized,
+nonlinear effect. Therefore adjustments in small jumps are advised.
+
+If you run into an error, try troubleshooting:
+1. Reset sigmas toward library defaults (`sigmaM=1, sigmaB=2, sigmaA=5, sigmaP=20`).
+2. Lower `epV`.(around 1 is ideal)
+3. Check landmark placement, such as landmarks that are too clustered, too few
+   (fewer than ~6), or clicked in a mismatched order between source and
+   reference images can poor initial affine which than fails LDDMM fitting
+
+**Note on landmark reproducibility:** landmarks are chosen interactively
+each run via `LandmarkPicker.py`, so results can vary slightly run to
+run even with identical parameters. Therefore, before touching the parameters
+it might be helpful to checl QC4 landmark QC first.
 
 ## Outputs
 Outputs are saved in a directory named after the two samples and contains CSV of aligned barcodes, before and after-alignment plot, manual landmark fit plot, affine transformation file in .npz format. 
@@ -250,7 +278,7 @@ Rscript STcompare.R \
   --sample_reference (insert name)
 ```
 
-the code thus requires four arguments, those being:
+the code thus requires **four arguments**, those being:
 ```bash
 --counts1 (.h5 count matrix from Cell Ranger for the aligned sample),
 --counts2 (.h5 count matrix from Cell Ranger for the reference sample),
@@ -258,7 +286,7 @@ the code thus requires four arguments, those being:
 --spatial2 (spatial/ folder from Cell Ranger for the reference sample)
 ```
 
-optional arguments include:
+**optional arguments include:**
 ```bash
 --outdir (saving outputs)
 --sample_aligned (name of aligned sample)
