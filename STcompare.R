@@ -8,6 +8,7 @@ suppressPackageStartupMessages({
   library(patchwork)
   library(ggplot2)
   library(jsonlite)
+  library(gridExtra)
   library(argparser, quietly = TRUE)
 })
 
@@ -34,7 +35,7 @@ if (length(missing) > 0) {
   quit(status = 1)
 }
 
-# seting names
+# setting names
 sample_aligned_name <- argv$sample_aligned
 sample_reference_name <- argv$sample_reference
 
@@ -301,3 +302,60 @@ for (gene in genes_flat) {
   )
   save_plot(pixelClass(input = ss, gene = gene), file.path(output_dirs[["Pixel_Class"]], paste0(gene, "_PixelClass.png")), width = 10, height = 5)
 }
+
+## final summary report
+mean_corr <- mean(results$correlationCoef, na.rm = TRUE)
+median_corr <- median(results$correlationCoef, na.rm = TRUE)
+n_sig <- sum(results$empirical_pval < 0.05, na.rm = TRUE)
+best_gene <- rownames(results)[which.max(results$correlationCoef)]
+worst_gene <- rownames(results)[which.min(results$correlationCoef)]
+
+fit_quality <- if (mean_corr >= 0.6) {
+  "Strong spatial correspondence between samples for these markers."
+} else if (mean_corr >= 0.3) {
+  "Moderate spatial correspondence: some markers align well, others may need review."
+} else {
+  "Weak spatial correspondence (try reviewing alignment quality first, check QC outputs from STalign)"
+}
+
+# key results in gene expression matching
+summary_text <- paste(
+  paste0(sample_aligned_name, " vs ", sample_reference_name),
+  paste0("Matched spots: ", ncol(counts1_matched), " / ", ncol(counts2_matched)),
+  paste0("Genes analyzed: ", nrow(results), "   Significant (p<0.05): ", n_sig, " / ", nrow(results)),
+  paste0("Mean r = ", round(mean_corr, 3), "   Median r = ", round(median_corr, 3)),
+  paste0("Best: ", best_gene, " (r=", round(max(results$correlationCoef, na.rm = TRUE), 3),
+         ")   Worst: ", worst_gene, " (r=", round(min(results$correlationCoef, na.rm = TRUE), 3), ")"),
+  "",
+  fit_quality,
+  sep = "\n"
+)
+
+text_panel <- ggplot() +
+  annotate("text", x = 0, y = 0, label = summary_text, hjust = 0, vjust = 1, size = 4, family = "mono") +
+  xlim(0, 10) + ylim(-6, 1) +
+  theme_void()
+
+# results table
+table_panel <- tableGrob(
+  round(results[, c("correlationCoef", "empirical_pval")], 3),
+  theme = ttheme_minimal(base_size = 8)
+)
+
+# key figures: reusing the best-correlated gene's raster pair and correlation plot
+best_gene_limits <- get_shared_gene_lims(rastList, best_gene, rast_assay, sample_aligned_name, sample_reference_name)
+key_raster <- make_raster_pair(
+  best_gene, rastList, rast_assay, sample_aligned_name, sample_reference_name,
+  shared_xlim, shared_ylim, coord_label, expr_label
+)
+key_corr_plot <- plotCorrelationGeneExp(rastList, sc, best_gene)
+
+# combination into final document and directing it to the right saving point
+final_panel <- (text_panel | table_panel) / key_raster / key_corr_plot +
+  plot_layout(heights = c(1, 1.3, 1)) +
+  plot_annotation(title = paste("STcompare Summary:", sample_aligned_name, "aligned to", sample_reference_name))
+
+summary_path <- file.path(output_dirs[["Results"]], "Summary_Report.pdf")
+ggsave(summary_path, final_panel, width = 12, height = 14, dpi = 300, bg = "white")
+
+print(paste("Summary report saved to:", summary_path))
