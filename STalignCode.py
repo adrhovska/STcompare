@@ -541,52 +541,15 @@ def main():
 
         # STalign QC plots
         if not args.skip_stalign_qc:
-            make_stalign_input_qc_plot(
-                stalign_data,
-                points1,
-                points2,
-                paths["stalign_input_qc_plot"],
-            )
-            make_stalign_initial_affine_qc_plot(
-                stalign_data,
-                points1,
-                points2,
-                paths["stalign_initial_affine_qc_plot"],
-            )
-            make_stalign_deformed_image_qc_plot(
-                stalign_data,
-                stalign_out,
-                paths["stalign_deformed_image_qc_plot"],
-            )
-            make_stalign_deformation_grid_qc_plot(
-                stalign_data,
-                stalign_out,
-                points1,
-                points2,
-                paths["stalign_deformation_grid_qc_plot"],
-                grid_levels=args.stalign_grid_levels,
-            )
-            make_stalign_spots_on_target_qc_plot(
-                src_out,
-                tgt,
-                stalign_data,
-                paths["stalign_spots_on_target_qc_plot"],
-                title=f"STalign spot QC: {args.sample_aligned} aligned to {args.sample_reference}",
-            )
-            make_stalign_displacement_histogram(
-                src_out,
-                paths["stalign_displacement_hist_plot"],
-            )
-            make_stalign_wm_qc_plots(
-                src_out,
-                paths["stalign_wm_spot_plot"],
-                paths["stalign_wm_hist_plot"],
-            )
-            make_stalign_lddmm_diagnostic_plot(
-                stalign_data,
-                stalign_out,
-                paths["stalign_lddmm_diagnostic_plot"],
-            )
+            make_stalign_input_qc_plot(stalign_data, points1, points2, paths["stalign_input_qc_plot"])
+            make_stalign_initial_affine_qc_plot(stalign_data, points1, points2, paths["stalign_initial_affine_qc_plot"])
+            make_stalign_deformed_image_qc_plot(stalign_data, stalign_out, paths["stalign_deformed_image_qc_plot"])
+            make_stalign_deformation_grid_qc_plot(stalign_data, stalign_out, points1, points2, paths["stalign_deformation_grid_qc_plot"], grid_levels=args.stalign_grid_levels)
+            make_stalign_spots_on_target_qc_plot(src_out, tgt, stalign_data, paths["stalign_spots_on_target_qc_plot"], title=f"STalign spot QC: {args.sample_aligned} aligned to {args.sample_reference}")
+            make_stalign_displacement_histogram(src_out, paths["stalign_displacement_hist_plot"])
+            make_stalign_wm_qc_plots(src_out, paths["stalign_wm_spot_plot"], paths["stalign_wm_hist_plot"])
+            make_stalign_lddmm_diagnostic_plot(stalign_data, stalign_out, paths["stalign_lddmm_diagnostic_plot"])
+            
         # saving STalign transform
         save_stalign_transform(paths["transform_file"], stalign_out, points1, points2)
 
