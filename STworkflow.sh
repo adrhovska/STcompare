@@ -1,14 +1,15 @@
 #!/bin/bash
 
-## User settings 
+"""User settings 
 # conda environments setup and activation
 # setup environment names based on your local conda environment names
-source "$(conda info --base)/etc/profile.d/conda.sh"
+"""
+source '$(conda info --base)/etc/profile.d/conda.sh'
 activate_env() {
-  local env_name="$1"
-  conda activate "$env_name"
+  local env_name='$1'
+  conda activate '$env_name'
   local status=$?
-  if [[ "$status" -ne 0 ]]; then
+  if [[ '$status' -ne 0 ]]; then
     echo "Could not activate conda environment: $env_name" >&2
     exit 1
   fi
@@ -17,12 +18,12 @@ deactivate_env() {
   conda deactivate
 }
 
-PY_ENV="python_env" 
-R_ENV="r_env"
+PY_ENV='python_env'
+R_ENV='r_env'
 
 # project folder 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_DIR="$(pwd)"
+SCRIPT_DIR='$(cd '$(dirname '${BASH_SOURCE[0]}')' && pwd)'
+PROJECT_DIR='$(pwd)'
 
 # help message
 usage() {
@@ -59,7 +60,7 @@ EOF
 }
 
 need_value() {
-  if [[ $# -lt 2 || "$2" == -* ]]; then
+  if [[ $# -lt 2 || '$2' == -* ]]; then
     echo "Missing value for $1" >&2
     usage
     exit 1
@@ -68,60 +69,60 @@ need_value() {
 
 # parse arguments 
 while [[ $# -gt 0 ]]; do
-  case "$1" in
+  case '$1"'in
     --source_dir)
-      need_value "$@"
-      SOURCE_DIR="$2"
+      need_value '$@'
+      SOURCE_DIR='$2'
       shift 2
       ;;
     --reference_dir)
-      need_value "$@"
-      REFERENCE_DIR="$2"
+      need_value '$@'
+      REFERENCE_DIR='$2'
       shift 2
       ;;
     --sample_aligned)
-      need_value "$@"
-      SAMPLE_ALIGNED="$2"
+      need_value '$@'
+      SAMPLE_ALIGNED='$2'
       shift 2
       ;;
     --sample_reference)
-      need_value "$@"
-      SAMPLE_REFERENCE="$2"
+      need_value '$@'
+      SAMPLE_REFERENCE='$2'
       shift 2
       ;;
     --project_dir)
-      need_value "$@"
-      PROJECT_DIR="$2"
+      need_value '$@'
+      PROJECT_DIR='$2'
       shift 2
       ;;
     --script_dir)
-      need_value "$@"
-      SCRIPT_DIR="$2"
+      need_valuev '$@'
+      SCRIPT_DIR='$2'
       shift 2
       ;;
     --py_env)
-      need_value "$@"
-      PY_ENV="$2"
+      need_value '$@'
+      PY_ENV='$2'
       shift 2
       ;;
     --r_env)
-      need_value "$@"
-      R_ENV="$2"
+      need_value '$@'
+      R_ENV='$2'
       shift 2
       ;;
     --counts1)
-      need_value "$@"
-      COUNTS1="$2"
+      need_value '$@'
+      COUNTS1='$2'
       shift 2
       ;;
     --counts2)
-      need_value "$@"
-      COUNTS2="$2"
+      need_value '$@'
+      COUNTS2='$2'
       shift 2
       ;;
     --spatial2)
-      need_value "$@"
-      SPATIAL2="$2"
+      need_value '$@'
+      SPATIAL2='$2'
       shift 2
       ;;
     --help)
@@ -138,19 +139,19 @@ done
 
 # check required arguments
 require_arg() {
-  local value="$1"
-  local name="$2"
+  local value='$1'
+  local name='$2'
 
-  if [[ -z "$value" ]]; then
+  if [[ -z '$value' ]]; then
     echo "Missing required argument: $name" >&2
     usage
     exit 1
   fi
 }
-require_arg "${SOURCE_DIR:-}" "--source_dir"
-require_arg "${REFERENCE_DIR:-}" "--reference_dir"
-require_arg "${SAMPLE_ALIGNED:-}" "--sample_aligned"
-require_arg "${SAMPLE_REFERENCE:-}" "--sample_reference"
+require_arg "${SOURCE_DIR:-}" '--source_dir'
+require_arg "${REFERENCE_DIR:-}" '--reference_dir'
+require_arg "${SAMPLE_ALIGNED:-}" '--sample_aligned'
+require_arg "${SAMPLE_REFERENCE:-}" '--sample_reference'
 
 # derived paths
 LANDMARK_PICKER="${SCRIPT_DIR}/LandmarkPicker.py"
@@ -189,13 +190,13 @@ ALIGNED_POS="${STALIGN_OUTDIR}/${SAMPLE_ALIGNED}_aligned_to_${SAMPLE_REFERENCE}_
 
 # helper checks for required files and directories
 need_file() {
-  if [[ ! -f "$1" ]]; then
+  if [[ ! -f '$1' ]]; then
     echo "Missing file: $1"
     exit 1
   fi
 }
 need_dir() {
-  if [[ ! -d "$1" ]]; then
+  if [[ ! -d '$1' ]]; then
     echo "Missing directory: $1"
     exit 1
   fi
@@ -209,7 +210,7 @@ need_dir "$SPATIAL2"
 mkdir -p "$RUN_DIR" "$LANDMARK_DIR" "$STALIGN_OUTDIR" "$STCOMPARE_OUTDIR"
 
 ## Workflow
-# 1: LandmarkPicker.py
+# 1. LandmarkPicker.py
 echo "Step 1: Running LandmarkPicker.py"
 echo "Click matching landmarks"
 activate_env "$PY_ENV"
@@ -225,7 +226,7 @@ deactivate_env
 need_file "$POINTS1"
 need_file "$POINTS2"
 
-# 2: STalignCode.py
+# 2. STalignCode.py
 echo "Step 2: Running STalignCode.py"
 activate_env "$PY_ENV"
 PYTHONPATH="$SCRIPT_DIR:${PYTHONPATH:-}" python "$STALIGN_SCRIPT" \
@@ -247,7 +248,7 @@ deactivate_env
 # check aligned coordinate file
 need_file "$ALIGNED_POS"
 
-# 3: STcompare.R
+# 3. STcompare.R
 echo "Step 3: Running STcompare.R"
 activate_env "$R_ENV"
 Rscript "$STCOMPARE_SCRIPT" \

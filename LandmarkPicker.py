@@ -6,23 +6,24 @@ import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 default_dir = Path.cwd() # default directory is the directory where the script is run but can be overriden 
 
-#// argument parsing (use argparse library available online: https://docs.python.org/3/library/argparse.html)
+# argument parsing (use argparse library available online: https://docs.python.org/3/library/argparse.html)
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--image1", required=True, help="Source tissue_hires_image.png")
-    parser.add_argument("--image2", required=True, help="Reference tissue_hires_image.png")
-    parser.add_argument("--sample_aligned", required=True, help="Source sample name")
-    parser.add_argument("--sample_reference", required=True, help="Reference sample name")
-    parser.add_argument("--project_dir", default=default_dir, type=Path, help="Output project directory. Defaults to the current working directory.") # type = Path helps it from returning a string to the path being stored as an object
+    parser.add_argument('--image1', required=True, help="Source tissue_hires_image.png")
+    parser.add_argument('--image2', required=True, help="Reference tissue_hires_image.png")
+    parser.add_argument('--sample_aligned', required=True, help="Source sample name")
+    parser.add_argument('--sample_reference', required=True, help="Reference sample name")
+    parser.add_argument('--project_dir', default=default_dir, type=Path, help="Output project directory. Defaults to the current working directory.") # type = Path helps it from returning a string to the path being stored as an object
     return parser.parse_args()
 
-#// function to click landmarks in images
-# creates a displaying window for the image and opens it
-# waits for the user to click on the landmark and returns the coordinates of the clicked point
-# returns coordinates in y, x order (STalign requires it in this order, y are rows and x columns)
-# closes image and displays the next one 
-# @param img: image to display
-# @param title: title of the displayed image 
+"""Clicking landmarks in images
+    creates a displaying window for the image and opens it
+    waits for the user to click on the landmark and returns the coordinates of the clicked point
+    returns coordinates in y, x order (STalign requires it in this order, y are rows and x columns)
+    closes image and displays the next one 
+    @param img: image to display
+    @param title: title of the displayed image 
+"""
 def click_landmark(img, title):
     fig, ax = plt.subplots(figsize=(10, 10))
     ax.imshow(img)
@@ -61,42 +62,46 @@ def main():
     n_points = int(input("Choose amount of landmark points, usually 6 to 10: "))
     if n_points < 3:
         raise ValueError("Need at least 3 landmark pairs for affine alignment.")
+    
     # looping over the chosen landmarks and storing the coordinate outputs in the lists (saved as dictionaries) 
     # repeating the same for the second image 
     for i in range(n_points): 
         y1, x1 = click_landmark(img1, f"{args.sample_aligned}/source: click landmark {i + 1}")
         points1.append(
             {
-                "landmark": i + 1,
-                "y": y1,
-                "x": x1,
+                'landmark': i + 1,
+                'y': y1,
+                'x': x1,
             }
         )
         y2, x2 = click_landmark(img2, f"{args.sample_reference}/reference: click matching landmark {i + 1}")
         points2.append(
             {
-                "landmark": i + 1,
-                "y": y2,
-                "x": x2,
+                'landmark': i + 1,
+                'y': y2,
+                'x': x2,
             }
         )
+
     # converting into pandas dfs
     df1 = pd.DataFrame(points1)
     df2 = pd.DataFrame(points2)
+
     # saving as CSVs for further analysis 
-    df1[["y", "x"]].to_csv(out1, index=False)
-    df2[["y", "x"]].to_csv(out2, index=False)
+    df1[['y', 'x']].to_csv(out1, index=False)
+    df2[['y', 'x']].to_csv(out2, index=False)
+    
     # creating one combined table with both source and reference landmarks for QC (check correct pairing of the landmarks)
     combined = pd.DataFrame(
         {
-            "landmark": df1["landmark"], # can take from any df essentially 
-            f"{args.sample_aligned}_y": df1["y"],
-            f"{args.sample_aligned}_x": df1["x"],
-            f"{args.sample_reference}_y": df2["y"],
-            f"{args.sample_reference}_x": df2["x"],
+            'landmark': df1['landmark'], # can take from any df essentially 
+            f"{args.sample_aligned}_y": df1['y'],
+            f"{args.sample_aligned}_x": df1['x'],
+            f"{args.sample_reference}_y": df2['y'],
+            f"{args.sample_reference}_x": df2['x'],
         }
     )
     combined.to_csv(out_combined, index=False)
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
