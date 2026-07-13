@@ -56,9 +56,9 @@ for (d in output_names) {
 # defining genes of interest
 # and unlisting to then allow assignment of tissue type
 genes_of_interest <- list(
-  progenitor_genes = c("HES1", "SOX2", "VIM", "FOXA2", "CORIN", "SOX6", "PBX1"),
-  dopaminergic_maturation_genes = c("TH", "DCX", "MAP2", "KCNJ6", "DDC", "CALB1", "ALDH1A1"),
-  patterning_genes = c("EN1", "EN2", "NKX2-2", "WNT5A", "SHH", "STMN2", "BARHL1", "EMX2")
+  progenitor_genes = c("HES1", "SOX2", "VIM"),
+  maturation_genes = c("TH", "DCX", "MAP2"),
+  patterning_genes = c("EN2", "NKX22", "WNT5A")
 )
 genes_flat <- unlist(genes_of_interest, use.names = FALSE)
 
@@ -199,6 +199,12 @@ results$cell_type <- sapply(rownames(results), function(g) {
   names(which(sapply(genes_of_interest, function(grp) g %in% grp)))
 })
 print(results)
+
+# per-category summary
+category_summary <- aggregate(correlationCoef ~ cell_type, data = results, FUN = function(x) c(mean = mean(x, na.rm = TRUE), n = length(x))
+print(category_summary)
+category_summary <- data.frame(cell_type = category_summary$cell_type, mean_correlation = round(category_summary$correlationCoef[, "mean"], 3), n_genes = category_summary$correlationCoef[, "n"])
+write.csv(category_summary, file.path(output_dirs[["Results"]], "Category_Summary.csv"), row.names = FALSE)
 
 # saving the results to a CSV file in the results directory
 write.csv(results, file.path(output_dirs[["Results"]], 'Results_Table.csv'), row.names = TRUE)
