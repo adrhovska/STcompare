@@ -53,13 +53,13 @@ for (d in output_names) {
   dir.create(output_dirs[[d]], showWarnings = FALSE, recursive = TRUE)
 }
 
-# defining genes of interest (from Supplementary material Extended Data Figure 8 b))
+# defining genes of interest
 # and unlisting to then allow assignment of tissue type
 genes_of_interest <- list(
-  epithelial_genes = c("KRT4", "KRT5", "IVL"),
-  smooth_muscle_genes = c("SMTN", "CALD1", "CSRP1", "TAGLN"),
-  skeletal_muscle_genes = c("TNNC1", "TNNC2", "ACTC1", "MYH8")
-) 
+  progenitor_genes = c("HES1", "SOX2", "VIM", "FOXA2", "CORIN", "SOX6", "PBX1"),
+  dopaminergic_maturation_genes = c("TH", "DCX", "MAP2", "KCNJ6", "DDC", "CALB1", "ALDH1A1"),
+  patterning_genes = c("EN1", "EN2", "NKX2-2", "WNT5A", "SHH", "STMN2", "BARHL1", "EMX2")
+)
 genes_flat <- unlist(genes_of_interest, use.names = FALSE)
 
 #// function reading aligned positions and Visium positions
