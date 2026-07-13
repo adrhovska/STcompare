@@ -1,12 +1,15 @@
+#// BarcodeMatcher.py has been created to split the tissue_positions.csv of each BLOCK file into separate files for each organoid
+# based on the barcodes in the sorted barcode files (pathways are hardcoded and have to be overwritten)
+
 import pandas as pd
 from pathlib import Path
 
 # hardcode paths to the compared barcodes: BLOCK1
-full_block_barcodes = Path("/Users/adrhovska/Desktop/OCT_BLOCK_4/outs/filtered_feature_bc_matrix/barcodes.tsv")
-block_tissue_positions = Path("/Users/adrhovska/Desktop/OCT_BLOCK_4/outs/spatial/tissue_positions.csv")
+full_block_barcodes = Path("//Users/adrhovska/Desktop/STdata/OCT_BLOCK_1/outs/filtered_feature_bc_matrix/barcodes.tsv")
+block_tissue_positions = Path("/Users/adrhovska/Desktop/STdata/OCT_BLOCK_1/outs/spatial/tissue_positions.csv")
 
 # folder with the complete set of sorted organoid barcode files
-sorted_barcode_folder = Path("/Users/adrhovska/Desktop/OCT_barcodes")
+sorted_barcode_folder = Path("/Users/adrhovska/Desktop/STdata/OCT_barcodes")
 
 # output folder for split tissue-position files
 outdir = Path("/Users/adrhovska/Desktop/Split_Positions")
@@ -19,6 +22,7 @@ def read_barcodes(path):
     barcodes = set()
 
     for line in lines:
+        line = line.strip()
         if not line:
             continue
         barcodes.add(line)
@@ -28,11 +32,11 @@ def read_barcodes(path):
 outdir.mkdir(parents=True, exist_ok=True)
 
 # read the barcodes from the full block
-whole_block_barcodes = read_barcodes(full_block_barcodes)
-
-# read tissue positions from the full block
 positions = pd.read_csv(block_tissue_positions)
 positions["barcode"] = positions["barcode"].astype(str)
+whole_block_barcodes = set(
+    positions.loc[positions["in_tissue"].astype(int) == 1, "barcode"] # make sure that it is in the tissue 
+)
 
 summary = []
 
@@ -71,6 +75,10 @@ for barcode_file in sorted_barcode_folder.glob("*barcodes*"):
         "organoid_id": organoid_id,
         "barcode_file": barcode_file.name,
         "n_sorted_barcodes": len(sorted_barcodes),
+        "n_overlap_with_block": len(overlap),
+        "n_missing_from_block": 0,
+        "n_positions_saved": len(subset),
+        "saved": True,
     })
 
 # save summary

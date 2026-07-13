@@ -1,87 +1,135 @@
 #!/bin/bash
 
-## User settings --> fix environments 
-
+## User settings 
 # conda environments setup and activation
-
+# setup environment names based on your local conda environment names
 source "$(conda info --base)/etc/profile.d/conda.sh"
-
 activate_env() {
   local env_name="$1"
   conda activate "$env_name"
-# Reader of Visium spot data
   local status=$?
-
   if [[ "$status" -ne 0 ]]; then
     echo "Could not activate conda environment: $env_name" >&2
     exit 1
   fi
 }
-
 deactivate_env() {
   conda deactivate
 }
 
-PY_ENV="python_env" # must be overwritten if user has different naming convention
+PY_ENV="python_env" 
 R_ENV="r_env"
 
-# project folder
+# project folder 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(pwd)"
 
-# parse arguments (using this and not e.g. getopt bc this one can use longer options and is more readable to the user)
+# help message
+usage() {
+  cat << EOF
+Usage: $0 \\
+  --source_dir <path> \\
+  --reference_dir <path> \\
+  --sample_aligned <name> \\
+  --sample_reference <name> \\
+  [--project_dir <path>] \\
+  [--script_dir <path>] \\
+  [--py_env <env>] \\
+  [--r_env <env>] \\
+  [--counts1 <path>] \\
+  [--counts2 <path>] \\
+  [--spatial2 <path>]
+
+Required:
+  --source_dir          Source Space Ranger outs directory
+  --reference_dir       Reference Space Ranger outs directory
+  --sample_aligned      Name of sample being aligned
+  --sample_reference    Name of reference sample
+
+Optional:
+  --project_dir         Project/output directory
+  --script_dir          Directory containing scripts
+  --py_env              Conda Python environment
+  --r_env               Conda R environment
+  --counts1             Source counts h5 file
+  --counts2             Reference counts h5 file
+  --spatial2            Reference spatial directory
+  --help                Show help message
+EOF
+}
+
+need_value() {
+  if [[ $# -lt 2 || "$2" == -* ]]; then
+    echo "Missing value for $1" >&2
+    usage
+    exit 1
+  fi
+}
+
+# parse arguments 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    -sd | --source_dir)
+    --source_dir)
+      need_value "$@"
       SOURCE_DIR="$2"
       shift 2
       ;;
-    -rd | --reference_dir)
+    --reference_dir)
+      need_value "$@"
       REFERENCE_DIR="$2"
       shift 2
       ;;
-    -sa | --sample_aligned)
+    --sample_aligned)
+      need_value "$@"
       SAMPLE_ALIGNED="$2"
       shift 2
       ;;
-    -sr | --sample_reference)
+    --sample_reference)
+      need_value "$@"
       SAMPLE_REFERENCE="$2"
       shift 2
       ;;
-    -pd | --project_dir)
+    --project_dir)
+      need_value "$@"
       PROJECT_DIR="$2"
       shift 2
       ;;
-    -sc | --script_dir)
+    --script_dir)
+      need_value "$@"
       SCRIPT_DIR="$2"
       shift 2
       ;;
     --py_env)
+      need_value "$@"
       PY_ENV="$2"
       shift 2
       ;;
     --r_env)
+      need_value "$@"
       R_ENV="$2"
       shift 2
       ;;
-    -c1 | --counts1)
+    --counts1)
+      need_value "$@"
       COUNTS1="$2"
       shift 2
       ;;
-    -c2 | --counts2)
+    --counts2)
+      need_value "$@"
       COUNTS2="$2"
       shift 2
       ;;
-    -s2 | --spatial2)
+    --spatial2)
+      need_value "$@"
       SPATIAL2="$2"
       shift 2
       ;;
-    -h|--help)
+    --help)
       usage
       exit 0
       ;;
     *)
-      echo "Unknown option: $1" 
+      echo "Unknown option: $1" >&2
       usage
       exit 1
       ;;
@@ -89,33 +137,25 @@ while [[ $# -gt 0 ]]; do
 done
 
 # check required arguments
-if [[ -z "${SOURCE_DIR:-}" ]]; then
-  echo "Missing required argument: --source_dir"
-  usage
-  exit 1
-fi
+require_arg() {
+  local value="$1"
+  local name="$2"
 
-if [[ -z "${REFERENCE_DIR:-}" ]]; then
-  echo "Missing required argument: --reference_dir"
-  usage
-  exit 1
-fi
-
-if [[ -z "${SAMPLE_ALIGNED:-}" ]]; then
-  echo "Missing required argument: --sample_aligned"
-  usage
-  exit 1
-fi
-
-if [[ -z "${SAMPLE_REFERENCE:-}" ]]; then
-  echo "Missing required argument: --sample_reference"
-  usage
-  exit 1
-fi
+  if [[ -z "$value" ]]; then
+    echo "Missing required argument: $name" >&2
+    usage
+    exit 1
+  fi
+}
+require_arg "${SOURCE_DIR:-}" "--source_dir"
+require_arg "${REFERENCE_DIR:-}" "--reference_dir"
+require_arg "${SAMPLE_ALIGNED:-}" "--sample_aligned"
+require_arg "${SAMPLE_REFERENCE:-}" "--sample_reference"
 
 # derived paths
 LANDMARK_PICKER="${SCRIPT_DIR}/LandmarkPicker.py"
 STALIGN_SCRIPT="${SCRIPT_DIR}/STalignCode.py"
+QC_PLOTS_SCRIPT="${SCRIPT_DIR}/STalignQC.py"
 STCOMPARE_SCRIPT="${SCRIPT_DIR}/STcompare.R"
 
 SOURCE_IMAGE="${SOURCE_DIR}/spatial/tissue_hires_image.png"
@@ -147,7 +187,7 @@ POINTS2="${LANDMARK_DIR}/${SAMPLE_REFERENCE}_points.csv"
 
 ALIGNED_POS="${STALIGN_OUTDIR}/${SAMPLE_ALIGNED}_aligned_to_${SAMPLE_REFERENCE}_barcodes.csv"
 
-# helper checks
+# helper checks for required files and directories
 need_file() {
   if [[ ! -f "$1" ]]; then
     echo "Missing file: $1"
@@ -161,8 +201,12 @@ need_dir() {
   fi
 }
 
+need_dir "$SOURCE_DIR"
+need_dir "$REFERENCE_DIR"
+need_dir "$SPATIAL2"
+
 # create main run directory
-mkdir -p "$RUN_DIR"
+mkdir -p "$RUN_DIR" "$LANDMARK_DIR" "$STALIGN_OUTDIR" "$STCOMPARE_OUTDIR"
 
 ## Workflow
 # 1: LandmarkPicker.py
@@ -184,7 +228,7 @@ need_file "$POINTS2"
 # 2: STalignCode.py
 echo "Step 2: Running STalignCode.py"
 activate_env "$PY_ENV"
-python "$STALIGN_SCRIPT" \
+PYTHONPATH="$SCRIPT_DIR:${PYTHONPATH:-}" python "$STALIGN_SCRIPT" \
   --image1 "$SOURCE_IMAGE" \
   --image2 "$REFERENCE_IMAGE" \
   --pos1 "$SOURCE_POS" \
@@ -217,6 +261,7 @@ Rscript "$STCOMPARE_SCRIPT" \
 
 deactivate_env
 
+# final output summary
 echo "Complete :D"
 echo "Project directory:    $PROJECT_DIR"
 echo "Tool directory:       $SCRIPT_DIR"
@@ -225,3 +270,4 @@ echo "Landmarks:            $LANDMARK_DIR"
 echo "Aligned coordinates:  $ALIGNED_POS"
 echo "STalign outputs:      $STALIGN_OUTDIR"
 echo "STcompare outputs:    $STCOMPARE_OUTDIR"
+echo "QC plotting module:   $QC_PLOTS_SCRIPT"

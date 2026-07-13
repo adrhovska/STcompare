@@ -21,6 +21,8 @@ def parse_args():
 # waits for the user to click on the landmark and returns the coordinates of the clicked point
 # returns coordinates in y, x order (STalign requires it in this order, y are rows and x columns)
 # closes image and displays the next one 
+# @param img: image to display
+# @param title: title of the displayed image 
 def click_landmark(img, title):
     fig, ax = plt.subplots(figsize=(10, 10))
     ax.imshow(img)
@@ -58,11 +60,11 @@ def main():
     # setting the number of landmarks to choose on the image (3 is the minimum allowed due to affine alignment)
     n_points = int(input("Choose amount of landmark points, usually 6 to 10: "))
     if n_points < 3:
+        raise ValueError("Need at least 3 landmark pairs for affine alignment.")
     # looping over the chosen landmarks and storing the coordinate outputs in the lists (saved as dictionaries) 
     # repeating the same for the second image 
-        y1, x1 = click_landmark(img1, f"{args.sample_aligned}/source: click landmark {i + 1}")
-        raise ValueError("Need at least 3 landmark pairs for affine alignment.")
     for i in range(n_points): 
+        y1, x1 = click_landmark(img1, f"{args.sample_aligned}/source: click landmark {i + 1}")
         points1.append(
             {
                 "landmark": i + 1,
@@ -78,7 +80,6 @@ def main():
                 "x": x2,
             }
         )
-
     # converting into pandas dfs
     df1 = pd.DataFrame(points1)
     df2 = pd.DataFrame(points2)
@@ -88,7 +89,7 @@ def main():
     # creating one combined table with both source and reference landmarks for QC (check correct pairing of the landmarks)
     combined = pd.DataFrame(
         {
-            "landmark": df1["landmark"], # can take from any df
+            "landmark": df1["landmark"], # can take from any df essentially 
             f"{args.sample_aligned}_y": df1["y"],
             f"{args.sample_aligned}_x": df1["x"],
             f"{args.sample_reference}_y": df2["y"],

@@ -8,23 +8,25 @@ suppressPackageStartupMessages({
   library(patchwork)
   library(ggplot2)
   library(jsonlite)
+  library(gridExtra)
   library(argparser, quietly = TRUE)
 })
 
 ## Parsing command line arguments with argparser
 p <- arg_parser("STcompare")
-# adding command line arguments
+
 p <- add_argument(p, "--counts1", help = "Path to the aligned sample counts file")
 p <- add_argument(p, "--counts2", help = "Path to the reference sample counts file")
 p <- add_argument(p, "--pos1", help = "Path to the aligned positions file")
 p <- add_argument(p, "--spatial2", help = "Path to the reference spatial directory")
 p <- add_argument(p, "--outdir", help = "Output directory", default = "./STcompare_out")
 p <- add_argument(p, "--scale", help = "Scale type: highres | lowres", default = "hires")
-p <- add_argument(p, "--res", help = "Raster resolution", default = 150L, type = "integer")
+p <- add_argument(p, "--res", help = "Raster resolution", default = 50L, type = "integer")
 p <- add_argument(p, "--threads", help = "Number of threads", default = 4L, type = "integer")
 p <- add_argument(p, "--sample_aligned", help = "Name of the aligned sample", default = "Sample_1")
 p <- add_argument(p, "--sample_reference", help = "Name of the reference sample", default = "Sample_2")
 argv <- parse_args(p)
+
 # validating arguments
 required <- c("counts1", "counts2", "pos1", "spatial2")
 missing <- required[sapply(required, function(k) is.na(argv[[k]]))]
@@ -33,24 +35,14 @@ if (length(missing) > 0) {
   quit(status = 1)
 }
 
-# seting names and print passed arguments
+# setting names
 sample_aligned_name <- argv$sample_aligned
 sample_reference_name <- argv$sample_reference
-
-print(paste("counts1           :", argv$counts1))
-print(paste("counts2           :", argv$counts2))
-print(paste("pos1              :", argv$pos1))
-print(paste("spatial2          :", argv$spatial2))
-print(paste("outdir            :", argv$outdir))
-print(paste("scale             :", argv$scale))
-print(paste("res               :", argv$res))
-print(paste("threads           :", argv$threads))
-print(paste("sample_aligned    :", argv$sample_aligned))
-print(paste("sample_reference  :", argv$sample_reference))
 
 # creating output directories
 # 1. create main output directory
 dir.create(argv$outdir, showWarnings = FALSE, recursive = TRUE)
+
 # 2. create comparison-specific subdirectory
 dir_comparison <- argv$outdir
 
@@ -67,10 +59,10 @@ genes_of_interest <- list(
   epithelial_genes = c("KRT4", "KRT5", "IVL"),
   smooth_muscle_genes = c("SMTN", "CALD1", "CSRP1", "TAGLN"),
   skeletal_muscle_genes = c("TNNC1", "TNNC2", "ACTC1", "MYH8")
-) # Have to change downstream
+) 
 genes_flat <- unlist(genes_of_interest, use.names = FALSE)
 
-## Reader of aligned positions and Visium positions
+#// function reading aligned positions and Visium positions
 # reads a CSV file containing aligned or Visium positions and returns a data frame with x and y coordinates
 # checks for required columns and ensures that the coordinates are numeric and finite
 # @path: path to the CSV file containing aligned positions
@@ -111,7 +103,7 @@ read_positions <- function(path, sample_name, type = "visium", scale_type = "hir
   return(coord)
 }
 
-## Matcher of counts to positions
+#// function matching of counts to positions
 # matches the barcodes in the counts matrix to the barcodes in the positions data frame
 # returns a list containing the matched counts matrix and the corresponding coordinates
 # -1 suffixes are removed from barcodes for matching if exact matches are not found
@@ -230,7 +222,7 @@ shared_ylim <- c(min(all_y) - spatial_pad, max(all_y) + spatial_pad)
 coord_label <- paste(argv$scale, "scale")
 expr_label <- "rasterised raw counts"
 
-## Builder of shared gene limits for raster plots
+#// function building shared gene limits for raster plots
 # rasterised values may differ between samples, finding the shared limits for each gene across both samples needed to ensure consistent color scaling in the plots
 # @rastList: list of rasterised SpatialExperiment objects for each sample
 # @gene: gene name for which to find the shared limits
@@ -245,7 +237,7 @@ get_shared_gene_lims <- function(rastList, gene, assay_name, name1, name2) {
   if (limits[1] == limits[2]) limits <- limits + c(-0.5, 0.5)
   return(limits)
 }
-# Creator of single raster plot for a given gene and sample
+#// function creating single raster plot for a given gene and sample
 # @rast: rasterised SpatialExperiment object for the sample
 # @name: name of the sample
 # @gene: gene name for which to create the raster plot
@@ -257,12 +249,14 @@ get_shared_gene_lims <- function(rastList, gene, assay_name, name1, name2) {
 # @expr_label: legend label describing the expression values (e.g. "rasterised raw counts")
 
 make_single_raster <- function(rast, name, gene, gene_limits, rast_assay, shared_xlim, shared_ylim, coord_label, expr_label) {
-  plotRaster(rast, assay_name = rast_assay, feature_name = gene, plotTitle = paste(name, "-", gene)) + scale_fill_viridis_c(limits = gene_limits, oob = scales::squish, name = paste0(gene, "\n", expr_label)) + coord_sf(xlim = shared_xlim, ylim = shared_ylim, expand = FALSE, clip = "off") + labs(
+  plotRaster(rast, assay_name = rast_assay, feature_name = gene, plotTitle = paste(name, "-", gene)) + 
+  scale_fill_viridis_c(limits = gene_limits, oob = scales::squish, name = paste0(gene, "\n", expr_label)) + 
+  coord_sf(xlim = shared_xlim, ylim = shared_ylim, expand = FALSE, clip = "off") + labs(
     x = paste("x coordinate (", coord_label, ")"),
     y = paste("y coordinate (", coord_label, ")")
   ) + theme(plot.margin = margin(10, 10, 10, 10))
 }
-## Joiner of raster plots for a single gene across two samples
+#// function joining raster plots for a single gene across two samples
 # creates a side-by-side patchwork plot with a shared fill scale for comparability
 # @gene: gene to plot
 # @rastList: named list of rasterised SpatialExperiment objects
@@ -308,3 +302,60 @@ for (gene in genes_flat) {
   )
   save_plot(pixelClass(input = ss, gene = gene), file.path(output_dirs[["Pixel_Class"]], paste0(gene, "_PixelClass.png")), width = 10, height = 5)
 }
+
+## final summary report
+mean_corr <- mean(results$correlationCoef, na.rm = TRUE)
+median_corr <- median(results$correlationCoef, na.rm = TRUE)
+n_sig <- sum(results$empirical_pval < 0.05, na.rm = TRUE)
+best_gene <- rownames(results)[which.max(results$correlationCoef)]
+worst_gene <- rownames(results)[which.min(results$correlationCoef)]
+
+fit_quality <- if (mean_corr >= 0.6) {
+  "Strong spatial correspondence between samples for these markers."
+} else if (mean_corr >= 0.3) {
+  "Moderate spatial correspondence: some markers align well, others may need review."
+} else {
+  "Weak spatial correspondence (try reviewing alignment quality first, check QC outputs from STalign)"
+}
+
+# key results in gene expression matching
+summary_text <- paste(
+  paste0(sample_aligned_name, " vs ", sample_reference_name),
+  paste0("Matched spots: ", ncol(counts1_matched), " / ", ncol(counts2_matched)),
+  paste0("Genes analyzed: ", nrow(results), "   Significant (p<0.05): ", n_sig, " / ", nrow(results)),
+  paste0("Mean r = ", round(mean_corr, 3), "   Median r = ", round(median_corr, 3)),
+  paste0("Best: ", best_gene, " (r=", round(max(results$correlationCoef, na.rm = TRUE), 3),
+         ")   Worst: ", worst_gene, " (r=", round(min(results$correlationCoef, na.rm = TRUE), 3), ")"),
+  "",
+  fit_quality,
+  sep = "\n"
+)
+
+text_panel <- ggplot() +
+  annotate("text", x = 0, y = 0, label = summary_text, hjust = 0, vjust = 1, size = 4, family = "mono") +
+  xlim(0, 10) + ylim(-6, 1) +
+  theme_void()
+
+# results table
+table_panel <- tableGrob(
+  round(results[, c("correlationCoef", "empirical_pval")], 3),
+  theme = ttheme_minimal(base_size = 8)
+)
+
+# key figures: reusing the best-correlated gene's raster pair and correlation plot
+best_gene_limits <- get_shared_gene_lims(rastList, best_gene, rast_assay, sample_aligned_name, sample_reference_name)
+key_raster <- make_raster_pair(
+  best_gene, rastList, rast_assay, sample_aligned_name, sample_reference_name,
+  shared_xlim, shared_ylim, coord_label, expr_label
+)
+key_corr_plot <- plotCorrelationGeneExp(rastList, sc, best_gene)
+
+# combination into final document and directing it to the right saving point
+final_panel <- (text_panel | table_panel) / key_raster / key_corr_plot +
+  plot_layout(heights = c(1, 1.3, 1)) +
+  plot_annotation(title = paste("STcompare Summary:", sample_aligned_name, "aligned to", sample_reference_name))
+
+summary_path <- file.path(output_dirs[["Results"]], "Summary_Report.pdf")
+ggsave(summary_path, final_panel, width = 12, height = 14, dpi = 300, bg = "white")
+
+print(paste("Summary report saved to:", summary_path))
