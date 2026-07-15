@@ -24,7 +24,7 @@ p <- add_argument(p, "--type2", help = "Type of pos2: 'aligned' or 'visium'", de
 p <- add_argument(p, "--type1", help = "Type of pos1: 'aligned' or 'visium'", default = "aligned")
 p <- add_argument(p, "--outdir", help = "Output directory", default = "./STcompare_out")
 p <- add_argument(p, "--scale", help = "Scale type: highres | lowres", default = "hires")
-p <- add_argument(p, "--res", help = "Raster resolution", default = 50L, type = "integer")
+p <- add_argument(p, "--res", help = "Raster resolution", default = 20L, type = "integer")
 p <- add_argument(p, "--threads", help = "Number of threads", default = 4L, type = "integer")
 p <- add_argument(p, "--sample_aligned", help = "Name of the aligned sample", default = "Sample_1")
 p <- add_argument(p, "--sample_reference", help = "Name of the reference sample", default = "Sample_2")
@@ -193,6 +193,23 @@ rastList <- rasterizeGeneExpression(spe_list, assay_name = "counts", resolution 
 sc <- spatialCorrelationGeneExp(rastList, nThreads = argv$threads)
 ss <- spatialSimilarity(rastList)
 
+# saves one row per pair with an overall similarity number
+percent_similarity <- ss$similarityTable$percentSimilarity[
+  match(genes_flat, ss$similarityTable$gene)
+]
+
+overall_similarity <- data.frame(
+  sample_aligned = sample_aligned_name,
+  sample_reference = sample_reference_name,
+  mean_percent_similarity = mean(percent_similarity, na.rm = TRUE),
+  n_genes_evaluated = sum(!is.na(percent_similarity))
+)
+
+write.csv(
+  overall_similarity,
+  file.path(output_dirs[["Results"]], "Overall_Similarity.csv"),
+  row.names = FALSE
+)
 # spatial correlation results for genes of interest
 genes_in_sc <- genes_flat[genes_flat %in% rownames(sc)]
 results <- sc[genes_in_sc, c("correlationCoef", "pValuePermuteX", "pValuePermuteY"), drop = FALSE]
