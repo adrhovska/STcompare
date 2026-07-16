@@ -95,10 +95,10 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-LANDMARK_PICKER="${SCRIPT_DIR}/LandmarkPicker.py"
-STALIGN_SCRIPT="${SCRIPT_DIR}/STalignCode.py"
-QC_PLOTS_SCRIPT="${SCRIPT_DIR}/STalignQC.py"
-STCOMPARE_SCRIPT="${SCRIPT_DIR}/${STCOMPARE_SCRIPT_NAME}"
+LANDMARK_PICKER="${SCRIPT_DIR}/scripts/landmarking/LandmarkPicker.py"
+STALIGN_SCRIPT="${SCRIPT_DIR}/scripts/alignment/STalignCode.py"
+QC_PLOTS_SCRIPT="${SCRIPT_DIR}/scripts/alignment/STalignQC.py"
+STCOMPARE_SCRIPT="${SCRIPT_DIR}/scripts/comparison/${STCOMPARE_SCRIPT_NAME}"
 
 need_file() { if [[ ! -f "$1" ]]; then echo "Missing file: $1"; exit 1; fi }
 need_dir()  { if [[ ! -d "$1" ]]; then echo "Missing directory: $1"; exit 1; fi }
@@ -158,7 +158,7 @@ run_single_pair() {
 
   echo "Step 2: Running STalignCode.py for $align_pair_name"
   activate_env "$PY_ENV"
-  PYTHONPATH="$SCRIPT_DIR:${PYTHONPATH:-}" python "$STALIGN_SCRIPT" \
+  PYTHONPATH="$SCRIPT_DIR/scripts/alignment:${PYTHONPATH:-}" python "$STALIGN_SCRIPT" \
     --image1 "$source_image" --image2 "$reference_image" \
     --pos1 "$source_pos" --pos2 "$reference_pos" \
     --scale1 "$source_scale" --scale2 "$reference_scale" \
@@ -270,7 +270,7 @@ run_star_alignment() {
     echo "Aligning $name into reference frame ($REFERENCE_NAME)"
     
     activate_env "$PY_ENV"
-    PYTHONPATH="$SCRIPT_DIR:${PYTHONPATH:-}" python "$STALIGN_SCRIPT" \
+    PYTHONPATH="$SCRIPT_DIR/scripts/alignment:${PYTHONPATH:-}" python "$STALIGN_SCRIPT" \
       --image1 "${dir}/spatial/tissue_hires_image.png" \
       --image2 "${ref_dir}/spatial/tissue_hires_image.png" \
       --pos1 "${dir}/spatial/tissue_positions.csv" \

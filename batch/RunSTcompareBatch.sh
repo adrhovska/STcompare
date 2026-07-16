@@ -16,7 +16,7 @@ SCRIPT_DIR="/Users/adrhovska/Desktop/STdata/STcompare_code"
 SAMPLES_FILE="samples.txt"
 PROJECT_DIR="$(pwd)/STcompare_batch"
 PY_ENV="python_env"
-LANDMARK_PICKER="${SCRIPT_DIR}/LandmarkPicker.py"
+LANDMARK_PICKER="${SCRIPT_DIR}/scripts/landmarking/LandmarkPicker.py"
 
 ONLY="all"
 if [[ "${1:-}" == "--only" ]]; then
