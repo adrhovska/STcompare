@@ -1,4 +1,4 @@
-#// ImageSplitter.py can be used to split the hires tissue image
+# // ImageSplitter.py can be used to split the hires tissue image
 # and the corresponding tissue positions into separate organoid folders for further analysis (separates organoids)
 # pathways are hardcoded and have to be overwritten
 
@@ -9,13 +9,13 @@ import json
 import shutil
 from PIL import Image
 
-# read paths to the directories and files 
+# read paths to the directories and files
 block_spatial_dir = Path("/Users/adrhovska/Desktop/STdata/OCT_BLOCK_1/outs/spatial")
 original_hires_image = block_spatial_dir / "tissue_hires_image.png"
 scalefactors_file = block_spatial_dir / "scalefactors_json.json"
 split_positions_dir = Path("/Users/adrhovska/Desktop/Split_Positions_B1")
 outdir = Path("/Users/adrhovska/Desktop/BLOCK1_split_for_alignment")
-margin = 150 #TODO: maybe smaller?
+margin = 150  # TODO: maybe smaller?
 
 # read image
 img = Image.open(original_hires_image).convert("RGB")
@@ -33,7 +33,7 @@ for pos_file in split_positions_dir.glob("*_tissue_positions.csv"):
     organoid_id = pos_file.stem.replace("_tissue_positions", "")
     positions = pd.read_csv(pos_file)
 
-# convert full-resolution coordinates to hires-image coordinates
+    # convert full-resolution coordinates to hires-image coordinates
     x = positions["pxl_col_in_fullres"].astype(float) * hires_scale
     y = positions["pxl_row_in_fullres"].astype(float) * hires_scale
 

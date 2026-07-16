@@ -1,5 +1,4 @@
 #!/opt/homebrew/bin/bash
-# run_landmarks_batch.sh
 
 SAMPLES_FILE="samples.txt"
 PROJECT_DIR="$(pwd)/STcompare_batch"

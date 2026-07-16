@@ -1,0 +1,3 @@
+SampleA	/path/to/SampleA/outs
+SampleB	/path/to/SampleB/outs
+SampleC	/path/to/SampleC/outs

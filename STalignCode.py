@@ -121,7 +121,7 @@ def read_spots(pos_file):
 
 def read_scalefactors(scale_file):
     scale_file = Path(scale_file)
-    with open(scale_file, 'r') as f:
+    with open(scale_file, "r") as f:
         scalefactors = json.load(f)
     return scalefactors
 
@@ -230,7 +230,7 @@ def make_output_paths(args):
     outdir.mkdir(parents=True, exist_ok=True)
     if args.outname is None:
         outname = (
-            f"{args.sample_aligned}_aligned_to_" f"{args.sample_reference}_barcodes.csv"
+            f"{args.sample_aligned}_aligned_to_{args.sample_reference}_barcodes.csv"
         )
     else:
         outname = args.outname
@@ -583,8 +583,9 @@ def main():
     validate_spots(tgt, args.sample_reference)
 
     # reading manual landmarks
-    points1, points2 = read_landmark_points(args.points1), read_landmark_points(
-        args.points2
+    points1, points2 = (
+        read_landmark_points(args.points1),
+        read_landmark_points(args.points2),
     )
 
     # before-alignment plot

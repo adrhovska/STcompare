@@ -165,7 +165,7 @@ def make_stalign_lddmm_diagnostic_plot(stalign_data, stalign_out, outpath):
     phiI = STalign.transform_image_source_to_target(xv, v, A, xI, I, xJ)
 
     # phii is the coordinate deformation map on the target grid (backward warping used)
-    phii = STalign.build_transform(xv, v, A, XJ=xJ, direction='b')
+    phii = STalign.build_transform(xv, v, A, XJ=xJ, direction="b")
 
     # using previously def function to prepare for matplotlib plotting
     J_plot = image_for_plot(J)
@@ -196,7 +196,6 @@ def make_stalign_lddmm_diagnostic_plot(stalign_data, stalign_out, outpath):
 
     phii_np = to_numpy(phii)
     if phii_np.ndim >= 3:
-
         # calculation and plotting of approximate deformation magnitude (how much each pixel has moved)
         yy, xx = np.meshgrid(yJ, xJ_axis, indexing="ij")
         deformation_mag = np.sqrt(

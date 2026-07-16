@@ -18,8 +18,8 @@ deactivate_env() {
 PY_ENV="python_env"
 R_ENV="r_env"
 SKIP_LANDMARK_PICKING=false
-MODE="single_pair"   # single_pair | star_landmarks | star_alignment | star_compare | star_all
-
+MODE="single_pair"  
+STCOMPARE_SCRIPT_NAME="STcompare.R"   # override with --stcompare_script to use a different R script (e.g. STcompareTissueClusters.r)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(pwd)"
 SAMPLES_FILE="samples.txt"
@@ -36,7 +36,7 @@ Usage (single pair, original behaviour):
      [--counts1 <path>] [--counts2 <path>] [--spatial2 <path>] \\
      [--skip_landmark_picking]
 
-Usage (star topology, batch across all samples):
+Usage (star approach, batch across all samples):
   $0 --mode star_landmarks  --samples_file samples.txt --reference_name <name> [--project_dir <path>]
   $0 --mode star_alignment  --samples_file samples.txt --reference_name <name> [--project_dir <path>]
   $0 --mode star_compare    --samples_file samples.txt --reference_name <name> [--project_dir <path>]
@@ -59,6 +59,7 @@ Options:
   --counts2               Reference counts h5 file (single_pair mode)
   --spatial2              Reference spatial directory (single_pair mode)
   --skip_landmark_picking Skip LandmarkPicker.py, reuse existing landmark CSVs (single_pair mode)
+  --stcompare_script       Name of the R script (in --script_dir) to run for the STcompare step (default: STcompare.R)
   --help                  Show help message
 EOF
 }
@@ -88,6 +89,7 @@ while [[ $# -gt 0 ]]; do
     --counts2) need_value "$@"; COUNTS2="$2"; shift 2 ;;
     --spatial2) need_value "$@"; SPATIAL2="$2"; shift 2 ;;
     --skip_landmark_picking) SKIP_LANDMARK_PICKING=true; shift 1 ;;
+    --stcompare_script) need_value "$@"; STCOMPARE_SCRIPT_NAME="$2"; shift 2 ;;
     --help) usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage; exit 1 ;;
   esac
@@ -96,7 +98,7 @@ done
 LANDMARK_PICKER="${SCRIPT_DIR}/LandmarkPicker.py"
 STALIGN_SCRIPT="${SCRIPT_DIR}/STalignCode.py"
 QC_PLOTS_SCRIPT="${SCRIPT_DIR}/STalignQC.py"
-STCOMPARE_SCRIPT="${SCRIPT_DIR}/STcompare.R"
+STCOMPARE_SCRIPT="${SCRIPT_DIR}/${STCOMPARE_SCRIPT_NAME}"
 
 need_file() { if [[ ! -f "$1" ]]; then echo "Missing file: $1"; exit 1; fi }
 need_dir()  { if [[ ! -d "$1" ]]; then echo "Missing directory: $1"; exit 1; fi }
@@ -109,10 +111,8 @@ require_arg() {
   fi
 }
 
-## ---------------------------------------------------------------
-## Core single-pair workflow (landmarks -> STalign -> STcompare)
-## Reusable by both single_pair mode and the star modes.
-## ---------------------------------------------------------------
+## 1. Core single-pair workflow (landmarks -> STalign -> STcompare)
+--
 run_single_pair() {
   local src_dir="$1" ref_dir="$2" sample_aligned="$3" sample_reference="$4"
   local project_dir="$5" skip_landmarks="$6"
@@ -181,10 +181,8 @@ run_single_pair() {
 
   echo "Pair complete: $align_pair_name"
 }
+# load samples.txt into NAMES[]/DIRS[] arrays for star modes
 
-## ---------------------------------------------------------------
-## Load samples.txt into NAMES[]/DIRS[] arrays for star modes
-## ---------------------------------------------------------------
 load_samples() {
   need_file "$SAMPLES_FILE"
   NAMES=(); DIRS=()
@@ -200,9 +198,8 @@ get_dir_for_name() {
   done
 }
 
-## ---------------------------------------------------------------
-## Star mode: landmarks (each sample vs the reference, once each)
-## ---------------------------------------------------------------
+# star mode: landmarks (each sample vs the reference, once each)
+
 run_star_landmarks() {
   require_arg "$REFERENCE_NAME" "--reference_name"
   load_samples
@@ -225,9 +222,10 @@ run_star_landmarks() {
     fi
 
     mkdir -p "$run_dir"
-    echo "=================================================="
-    echo "Pick landmarks: $name  vs  reference ($REFERENCE_NAME)"
-    echo "=================================================="
+    echo ""
+    "Pick landmarks: $name  vs  reference ($REFERENCE_NAME)"
+    echo ""
+
     activate_env "$PY_ENV"
     python "$LANDMARK_PICKER" \
       --image1 "${dir}/spatial/tissue_hires_image.png" \
@@ -236,12 +234,9 @@ run_star_landmarks() {
       --project_dir "$run_dir"
     deactivate_env
   done
-  echo "Star landmark picking complete against reference: $REFERENCE_NAME"
 }
 
-## ---------------------------------------------------------------
-## Star mode: alignment (register every sample into reference frame)
-## ---------------------------------------------------------------
+# star mode: alignment (register every sample into reference frame)
 run_star_alignment() {
   require_arg "$REFERENCE_NAME" "--reference_name"
   load_samples
@@ -272,9 +267,8 @@ run_star_alignment() {
     fi
 
     mkdir -p "$stalign_outdir"
-    echo "=================================================="
     echo "Aligning $name into reference frame ($REFERENCE_NAME)"
-    echo "=================================================="
+    
     activate_env "$PY_ENV"
     PYTHONPATH="$SCRIPT_DIR:${PYTHONPATH:-}" python "$STALIGN_SCRIPT" \
       --image1 "${dir}/spatial/tissue_hires_image.png" \
@@ -291,12 +285,10 @@ run_star_alignment() {
 
     echo "$name" >> "$pair_log"
   done
-  echo "Star alignment complete."
 }
 
-## ---------------------------------------------------------------
-## Star mode: compare (every unique pair, using shared reference frame)
-## ---------------------------------------------------------------
+# star mode: compare (every unique pair, using shared reference frame)
+
 get_sample_info() {
   local sample_name="$1" dir
   dir="$(get_dir_for_name "$sample_name")"
@@ -342,9 +334,8 @@ run_star_compare() {
       local stcompare_outdir="${PROJECT_DIR}/STcompare_pairwise/${pair_tag}"
       mkdir -p "$stcompare_outdir"
 
-      echo "=================================================="
       echo "Comparing: $pair_tag"
-      echo "=================================================="
+
       Rscript "$STCOMPARE_SCRIPT" \
         --counts1 "$counts1" --counts2 "$counts2" \
         --pos1 "$pos1" --type1 "$type1" \
@@ -356,12 +347,8 @@ run_star_compare() {
     done
   done
   deactivate_env
-  echo "All star-based pairwise comparisons complete."
 }
 
-## ---------------------------------------------------------------
-## Dispatch
-## ---------------------------------------------------------------
 case "$MODE" in
   single_pair)
     require_arg "${SOURCE_DIR:-}" "--source_dir"
@@ -387,5 +374,3 @@ case "$MODE" in
 esac
 
 echo "Complete :D"
-echo "Project directory: $PROJECT_DIR"
-echo "Mode:               $MODE"

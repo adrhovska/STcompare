@@ -12,6 +12,14 @@ suppressPackageStartupMessages({
   library(argparser, quietly = TRUE)
 })
 
+# avoid macOS's quartz bitmap backend for ggsave()'s PNG output - quartz
+# routes through the Aqua/Cocoa app framework and can pop open a visible
+# R.app "Console" window on every fresh Rscript invocation (i.e. once per
+# pair in a batch run). Cairo renders headless with no GUI involved.
+if (capabilities("cairo")) {
+  options(bitmapType = "cairo")
+}
+
 # parsing command line arguments with argparser
 p <- arg_parser("STcompare")
 
@@ -50,7 +58,13 @@ dir.create(argv$outdir, showWarnings = FALSE, recursive = TRUE)
 dir_comparison <- argv$outdir
 
 # 3. create further subdirectories
-output_names <- c("Results", "Raster_Plots", "Correlation_Plots", "Linear_Regression", "Pixel_Class")
+# NEW: added Cluster_* directories to hold the tissue-type-cluster-level
+# versions of the raster / correlation / regression / pixel-class plots,
+# alongside (not replacing) the existing per-gene outputs
+output_names <- c(
+  "Results", "Raster_Plots", "Correlation_Plots", "Linear_Regression", "Pixel_Class",
+  "Cluster_Raster_Plots", "Cluster_Correlation_Plots", "Cluster_Linear_Regression", "Cluster_Pixel_Class"
+)
 output_dirs <- setNames(file.path(dir_comparison, output_names), output_names)
 for (d in output_names) {
   dir.create(output_dirs[[d]], showWarnings = FALSE, recursive = TRUE)
@@ -172,6 +186,17 @@ if (length(genes_flat) == 0) {
 }
 print(paste("Genes found in both samples:", length(genes_flat)))
 
+# NEW: restrict tissue-type cluster membership to genes that survived the
+# both-samples filter above, and define the cluster names used throughout
+# the cluster-level analysis below (progenitor_genes / maturation_genes /
+# patterning_genes)
+genes_of_interest <- lapply(genes_of_interest, function(g) g[g %in% genes_flat])
+genes_of_interest <- genes_of_interest[sapply(genes_of_interest, length) > 0]
+cluster_names <- names(genes_of_interest)
+if (length(cluster_names) == 0) {
+  warning("No tissue-type clusters have any surviving genes; cluster-level analysis will be skipped.")
+}
+
 # capturing total per-spot library size (ALL genes) before subsetting to the
 # marker panel, so normalization is against real sequencing depth rather
 # than just the sum of these few marker genes (which is often zero)
@@ -206,14 +231,46 @@ for (name in names(rastList)) {
   keep <- setdiff(rownames(mat), "__TOTAL__")
   mat <- mat[keep, , drop = FALSE]
   totals[totals == 0] <- NA  # guard against any genuinely empty pixel
-  mat <- t(t(mat) / totals) * 1e6
-  rastList[[name]] <- rastList[[name]][keep, ]
-  assay(rastList[[name]]) <- mat
+  mat <- t(t(mat) / totals) * 1e6  # CPM-normalised per-pixel expression
+
+  # keep the original rasterised object's structure (pixel geometry, colData,
+  # etc. that SEraster attaches and plotRaster() needs later) by subsetting
+  # rather than rebuilding a bare SpatialExperiment from scratch
+  gene_obj <- rastList[[name]][keep, ]
+  assay(gene_obj) <- mat
+
+  # NEW: build one pseudo-gene per tissue-type cluster by summing the
+  # CPM-normalised expression of its member genes at each pixel. This turns
+  # each cluster (progenitor / maturation / patterning) into a single
+  # composite signal that can be pushed through exactly the same
+  # correlation / similarity / raster pipeline used for individual genes,
+  # so it is directly comparable to the paper's tissue-type-level results.
+  if (length(cluster_names) > 0) {
+    cluster_mat <- do.call(rbind, lapply(cluster_names, function(cl) {
+      genes_here <- genes_of_interest[[cl]]
+      colSums(mat[genes_here, , drop = FALSE])
+    }))
+    rownames(cluster_mat) <- cluster_names
+
+    # clone the object's structure (same pixel geometry/colData) by
+    # subsetting rows off gene_obj rather than constructing anything from
+    # scratch, then swap in the cluster names/values; rbind merges it back
+    # with the per-gene object since both share identical colData (pixels)
+    cluster_obj <- gene_obj[seq_len(length(cluster_names)), ]
+    rownames(cluster_obj) <- cluster_names
+    assay(cluster_obj) <- cluster_mat
+
+    rastList[[name]] <- rbind(gene_obj, cluster_obj)
+  } else {
+    rastList[[name]] <- gene_obj
+  }
 }
 
 ## STcompare
+# sc / ss are computed over every row currently in rastList's assay, which
+# now includes both the individual marker genes and the cluster pseudo-genes
 sc <- spatialCorrelationGeneExp(rastList, nThreads = argv$threads)
-ss <- spatialSimilarity(rastList) 
+ss <- spatialSimilarity(rastList) # installed STcompare version doesn't expose a fold-change threshold arg; uses its own default
 
 # saves one row per pair with an overall similarity number
 percent_similarity <- ss$similarityTable$percentSimilarity[
@@ -243,13 +300,49 @@ results$cell_type <- sapply(rownames(results), function(g) {
 })
 print(results)
 
-# per-category summary
+# per-category summary (this is the mean of the individual-gene correlations
+# within each cluster - a softer summary; see Cluster_Level_Results.csv /
+# Cluster_Overall_Similarity.csv below for the true combined-signal metric)
 category_summary <- aggregate(correlationCoef ~ cell_type, data = results, FUN = function(x) c(mean = mean(x, na.rm = TRUE), n = length(x)))
 print(category_summary)
 category_summary <- data.frame(cell_type = category_summary$cell_type, mean_correlation = round(category_summary$correlationCoef[, "mean"], 3), n_genes = category_summary$correlationCoef[, "n"])
 write.csv(category_summary, file.path(output_dirs[["Results"]], "Category_Summary.csv"), row.names = FALSE)
 # saving the results to a CSV file in the results directory
 write.csv(results, file.path(output_dirs[["Results"]], "Results_Table.csv"), row.names = TRUE)
+
+## NEW: tissue-type cluster-level analysis
+# unlike Category_Summary.csv (average of independently-computed per-gene
+# correlations), this runs the correlation/similarity computation directly
+# on the summed cluster signal, and is the direct analogue of the per-gene
+# Results_Table.csv / Overall_Similarity.csv at the tissue-type-cluster
+# level - the numbers needed to build a per-cluster version of the paper's
+# all-organoids similarity heatmap (see build_tissue_cluster_heatmaps.R)
+if (length(cluster_names) > 0) {
+  cluster_percent_similarity <- ss$similarityTable$percentSimilarity[
+    match(cluster_names, ss$similarityTable$gene)
+  ]
+  cluster_overall_similarity <- data.frame(
+    sample_aligned = sample_aligned_name,
+    sample_reference = sample_reference_name,
+    cluster = cluster_names,
+    mean_percent_similarity = cluster_percent_similarity,
+    n_genes_in_cluster = sapply(genes_of_interest, length)
+  )
+  write.csv(
+    cluster_overall_similarity,
+    file.path(output_dirs[["Results"]], "Cluster_Overall_Similarity.csv"),
+    row.names = FALSE
+  )
+
+  clusters_in_sc <- cluster_names[cluster_names %in% rownames(sc)]
+  results_cluster <- sc[clusters_in_sc, c("correlationCoef", "pValuePermuteX", "pValuePermuteY"), drop = FALSE]
+  results_cluster$empirical_pval <- pmax(results_cluster$pValuePermuteX, results_cluster$pValuePermuteY)
+  print(results_cluster)
+  write.csv(results_cluster, file.path(output_dirs[["Results"]], "Cluster_Level_Results.csv"), row.names = TRUE)
+} else {
+  results_cluster <- NULL
+  clusters_in_sc <- character(0)
+}
 
 # defining the raster assay to use for plotting
 assays1 <- assayNames(rastList[[sample_aligned_name]])
@@ -357,6 +450,30 @@ for (gene in genes_flat) {
   save_plot(pixelClass(input = ss, gene = gene), file.path(output_dirs[["Pixel_Class"]], paste0(gene, "_PixelClass.png")), width = 10, height = 5)
 }
 
+## NEW: same set of diagnostic plots as above, but run on the tissue-type
+# cluster pseudo-genes instead of individual marker genes
+for (cl in cluster_names) {
+  if (cl %in% clusters_in_sc) {
+    save_plot(
+      make_raster_pair(
+        cl, rastList, rast_assay, sample_aligned_name, sample_reference_name,
+        shared_xlim, shared_ylim, coord_label, expr_label
+      ),
+      file.path(output_dirs[["Cluster_Raster_Plots"]], paste0(cl, "_Raster.png")),
+      width = 11, height = 5.5
+    )
+    save_plot(plotCorrelationGeneExp(rastList, sc, cl),
+      file.path(output_dirs[["Cluster_Correlation_Plots"]], paste0(cl, "_Correlation.png")),
+      width = 10, height = 5
+    )
+  }
+  save_plot(linearRegression(input = ss, gene = cl),
+    file.path(output_dirs[["Cluster_Linear_Regression"]], paste0(cl, "_LinearRegression.png")),
+    width = 10, height = 5
+  )
+  save_plot(pixelClass(input = ss, gene = cl), file.path(output_dirs[["Cluster_Pixel_Class"]], paste0(cl, "_PixelClass.png")), width = 10, height = 5)
+}
+
 # final summary report
 mean_corr <- mean(results$correlationCoef, na.rm = TRUE)
 median_corr <- median(results$correlationCoef, na.rm = TRUE)
@@ -372,6 +489,16 @@ fit_quality <- if (mean_corr >= 0.6) {
   "Weak spatial correspondence (try reviewing alignment quality first, check QC outputs from STalign)"
 }
 
+# NEW: tissue-type cluster line for the summary text
+cluster_summary_text <- if (!is.null(results_cluster) && nrow(results_cluster) > 0) {
+  paste0(
+    "Tissue-type cluster correlations:\n",
+    paste(sprintf("  %s: r=%.3f (p=%.3f)", rownames(results_cluster), results_cluster$correlationCoef, results_cluster$empirical_pval), collapse = "\n")
+  )
+} else {
+  "Tissue-type cluster correlations: none computed"
+}
+
 # key results in gene expression matching
 summary_text <- paste(
   paste0(sample_aligned_name, " vs ", sample_reference_name),
@@ -383,6 +510,8 @@ summary_text <- paste(
     ")   Worst: ", worst_gene, " (r=", round(min(results$correlationCoef, na.rm = TRUE), 3), ")"
   ),
   "",
+  cluster_summary_text,
+  "",
   fit_quality,
   sep = "\n"
 )
@@ -390,7 +519,7 @@ summary_text <- paste(
 text_panel <- ggplot() +
   annotate("text", x = 0, y = 0, label = summary_text, hjust = 0, vjust = 1, size = 4, family = "mono") +
   xlim(0, 10) +
-  ylim(-6, 1) +
+  ylim(-8, 1) +
   theme_void()
 
 # results table
