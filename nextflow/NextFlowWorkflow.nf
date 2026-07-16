@@ -44,7 +44,7 @@ process LANDMARK_PICKER {
     source "\$(conda info --base)/etc/profile.d/conda.sh"
     conda activate ${params.py_env}
 
-    python "${params.script_dir}/LandmarkPicker.py" \\
+    python "${params.script_dir}/scripts/landmarking/LandmarkPicker.py" \\
       --image1 "${source_image}" \\
       --image2 "${reference_image}" \\
       --sample_aligned "${sample_aligned}" \\
@@ -94,7 +94,7 @@ process STALIGN {
 
     mkdir -p STalign
 
-    PYTHONPATH="${params.script_dir}:\${PYTHONPATH:-}" python "${params.script_dir}/STalignCode.py" \\
+    PYTHONPATH="${params.script_dir}/scripts/alignment:\${PYTHONPATH:-}" python "${params.script_dir}/scripts/alignment/STalignCode.py" \\
       --image1 "${source_image}" \\
       --image2 "${reference_image}" \\
       --pos1 "${source_pos}" \\
@@ -138,7 +138,7 @@ process STCOMPARE {
 
     mkdir -p STcompare
 
-    Rscript "${params.script_dir}/STcompare.R" \\
+    Rscript "${params.script_dir}/scripts/comparison/STcompare.R" \\
       --counts1 "${counts1}" \\
       --counts2 "${counts2}" \\
       --pos1 "${aligned_pos}" \\

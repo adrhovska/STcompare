@@ -12,23 +12,26 @@ suppressPackageStartupMessages({
   library(argparser, quietly = TRUE)
 })
 
-## Parsing command line arguments with argparser
+# parsing command line arguments with argparser
 p <- arg_parser("STcompare")
 
 p <- add_argument(p, "--counts1", help = "Path to the aligned sample counts file")
 p <- add_argument(p, "--counts2", help = "Path to the reference sample counts file")
 p <- add_argument(p, "--pos1", help = "Path to the aligned positions file")
 p <- add_argument(p, "--spatial2", help = "Path to the reference spatial directory")
+p <- add_argument(p, "--pos2", help = "Path to sample 2 positions (aligned CSV or visium spatial dir)")
+p <- add_argument(p, "--type2", help = "Type of pos2: 'aligned' or 'visium'", default = "visium")
+p <- add_argument(p, "--type1", help = "Type of pos1: 'aligned' or 'visium'", default = "aligned")
 p <- add_argument(p, "--outdir", help = "Output directory", default = "./STcompare_out")
 p <- add_argument(p, "--scale", help = "Scale type: highres | lowres", default = "hires")
-p <- add_argument(p, "--res", help = "Raster resolution", default = 50L, type = "integer")
+p <- add_argument(p, "--res", help = "Raster resolution", default = 20L, type = "integer")
 p <- add_argument(p, "--threads", help = "Number of threads", default = 4L, type = "integer")
 p <- add_argument(p, "--sample_aligned", help = "Name of the aligned sample", default = "Sample_1")
 p <- add_argument(p, "--sample_reference", help = "Name of the reference sample", default = "Sample_2")
 argv <- parse_args(p)
 
 # validating arguments
-required <- c("counts1", "counts2", "pos1", "spatial2")
+required <- c("counts1", "counts2", "pos1", "pos2")
 missing <- required[sapply(required, function(k) is.na(argv[[k]]))]
 if (length(missing) > 0) {
   print(paste("ERROR: Missing required argument(s):", paste("--", missing, collapse = ",")))
@@ -47,31 +50,31 @@ dir.create(argv$outdir, showWarnings = FALSE, recursive = TRUE)
 dir_comparison <- argv$outdir
 
 # 3. create further subdirectories
-output_names <- c("Results", "Coordinate_QC", "Raster_Plots", "Correlation_Plots", "Linear_Regression", "Pixel_Class")
+output_names <- c("Results", "Raster_Plots", "Correlation_Plots", "Linear_Regression", "Pixel_Class")
 output_dirs <- setNames(file.path(dir_comparison, output_names), output_names)
 for (d in output_names) {
   dir.create(output_dirs[[d]], showWarnings = FALSE, recursive = TRUE)
 }
 
-# defining genes of interest (from Supplementary material Extended Data Figure 8 b))
+# defining genes of interest
 # and unlisting to then allow assignment of tissue type
 genes_of_interest <- list(
-  epithelial_genes = c("KRT4", "KRT5", "IVL"),
-  smooth_muscle_genes = c("SMTN", "CALD1", "CSRP1", "TAGLN"),
-  skeletal_muscle_genes = c("TNNC1", "TNNC2", "ACTC1", "MYH8")
-) 
+  progenitor_genes = c("HES1", "SOX2", "VIM"),
+  maturation_genes = c("TH", "DCX", "MAP2"),
+  patterning_genes = c("EN2", "NKX22", "WNT5A")
+)
 genes_flat <- unlist(genes_of_interest, use.names = FALSE)
 
-#// function reading aligned positions and Visium positions
-# reads a CSV file containing aligned or Visium positions and returns a data frame with x and y coordinates
-# checks for required columns and ensures that the coordinates are numeric and finite
-# @path: path to the CSV file containing aligned positions
-# @sample_name: name of the sample for error messages
-# @type: type of positions ("aligned" or "visium")
-# @scale_type: scale type for Visium positions ("hires" or "lowres")
+# reading aligned positions and Visium positions
+#   reads a CSV file containing aligned or Visium positions and returns a data frame with x and y coordinates
+#   checks for required columns and ensures that the coordinates are numeric and finite
+#   @path: path to the CSV file containing aligned positions
+#   @sample_name: name of the sample for error messages
+#   @type: type of positions ("aligned" or "visium")
+#   @scale_type: scale type for Visium positions ("hires" or "lowres")
 
 read_positions <- function(path, sample_name, type = "visium", scale_type = "hires") {
-  if (type == "aligned") { # source and reference 
+  if (type == "aligned") {
     pos <- read.csv(path, header = TRUE, check.names = FALSE, stringsAsFactors = FALSE)
     required_cols <- c("barcode", "x", "y")
     if (!all(required_cols %in% colnames(pos))) {
@@ -103,17 +106,16 @@ read_positions <- function(path, sample_name, type = "visium", scale_type = "hir
   return(coord)
 }
 
-#// function matching of counts to positions
-# matches the barcodes in the counts matrix to the barcodes in the positions data frame
-# returns a list containing the matched counts matrix and the corresponding coordinates
-# -1 suffixes are removed from barcodes for matching if exact matches are not found
-# @counts: counts matrix with barcodes as column names
-# @pos: positions data frame with barcodes as row names
-# @sample_name: name of the sample for error messages
+# matching of counts to positions
+#   matches the barcodes in the counts matrix to the barcodes in the positions data frame
+#   returns a list containing the matched counts matrix and the corresponding coordinates
+#   @counts: counts matrix with barcodes as column names
+#   @pos: positions data frame with barcodes as row names
+#   @sample_name: name of the sample for error messages
 
 match_counts_to_positions <- function(counts, pos, sample_name) {
   exact_common <- intersect(colnames(counts), rownames(pos))
-  print(paste(sample_name, "exact barcode matches:", length(exact_common))) # might not be needed bc till now always found
+  print(paste(sample_name, "exact barcode matches:", length(exact_common)))
   if (length(exact_common) > 0) {
     counts_m <- counts[, exact_common, drop = FALSE]
     pos_m <- pos[exact_common, , drop = FALSE]
@@ -129,9 +131,11 @@ match_counts_to_positions <- function(counts, pos, sample_name) {
     pos_m <- pos[pos_idx, , drop = FALSE]
     rownames(pos_m) <- colnames(counts_m)
   }
-  # Building the coordinates matrix for the matched spots
+
+  # building the coordinates matrix for the matched spots
   coords <- cbind(x = as.numeric(pos_m$x), y = as.numeric(pos_m$y))
   rownames(coords) <- rownames(pos_m)
+
   # QC
   if (ncol(counts_m) == 0 || nrow(coords) == 0) stop(paste(sample_name, " has zero matched spots."))
   if (!all(is.finite(coords))) stop(paste(sample_name, " has non-finite coordinates."))
@@ -142,8 +146,8 @@ match_counts_to_positions <- function(counts, pos, sample_name) {
 # reading counts and positions, checking coordinate systems, and matching counts to positions using the defined functions
 counts1 <- Read10X_h5(argv$counts1)
 counts2 <- Read10X_h5(argv$counts2)
-pos1 <- read_positions(argv$pos1, sample_aligned_name, type = "aligned")
-pos2 <- read_positions(argv$spatial2, sample_reference_name, type = "visium", scale_type = argv$scale)
+pos1 <- read_positions(argv$pos1, sample_aligned_name, type = argv$type1, scale_type = argv$scale)
+pos2 <- read_positions(argv$pos2, sample_reference_name, type = argv$type2, scale_type = argv$scale)
 samples <- list(
   list(counts = counts1, pos = pos1, name = sample_aligned_name),
   list(counts = counts2, pos = pos2, name = sample_reference_name)
@@ -168,11 +172,23 @@ if (length(genes_flat) == 0) {
 }
 print(paste("Genes found in both samples:", length(genes_flat)))
 
+# capturing total per-spot library size (ALL genes) before subsetting to the
+# marker panel, so normalization is against real sequencing depth rather
+# than just the sum of these few marker genes (which is often zero)
+total_counts1 <- Matrix::colSums(counts1_matched)
+total_counts2 <- Matrix::colSums(counts2_matched)
+
 # filtering the count matrices to only include the genes of interest
 counts1_matched <- counts1_matched[genes_flat, , drop = FALSE]
 counts2_matched <- counts2_matched[genes_flat, , drop = FALSE]
 
+# appending the total as an extra row so SEraster aggregates it into each
+# pixel exactly like the marker genes
+counts1_matched <- rbind(counts1_matched, `__TOTAL__` = total_counts1)
+counts2_matched <- rbind(counts2_matched, `__TOTAL__` = total_counts2)
+
 ## Object building
+
 # creating SpatialExperiment objects for each sample using the matched counts and coordinates
 spe_list <- setNames(
   mapply(function(counts, coords) {
@@ -181,15 +197,45 @@ spe_list <- setNames(
   c(sample_aligned_name, sample_reference_name)
 )
 
-## Rasterization
+# rasterization
 rastList <- rasterizeGeneExpression(spe_list, assay_name = "counts", resolution = argv$res, square = FALSE)
+
+for (name in names(rastList)) {
+  mat <- assay(rastList[[name]])
+  totals <- mat["__TOTAL__", ]
+  keep <- setdiff(rownames(mat), "__TOTAL__")
+  mat <- mat[keep, , drop = FALSE]
+  totals[totals == 0] <- NA  # guard against any genuinely empty pixel
+  mat <- t(t(mat) / totals) * 1e6
+  rastList[[name]] <- rastList[[name]][keep, ]
+  assay(rastList[[name]]) <- mat
+}
 
 ## STcompare
 sc <- spatialCorrelationGeneExp(rastList, nThreads = argv$threads)
-ss <- spatialSimilarity(rastList)
+ss <- spatialSimilarity(rastList) 
+
+# saves one row per pair with an overall similarity number
+percent_similarity <- ss$similarityTable$percentSimilarity[
+  match(genes_flat, ss$similarityTable$gene)
+]
+
+overall_similarity <- data.frame(
+  sample_aligned = sample_aligned_name,
+  sample_reference = sample_reference_name,
+  mean_percent_similarity = mean(percent_similarity, na.rm = TRUE),
+  n_genes_evaluated = sum(!is.na(percent_similarity))
+)
+
+write.csv(
+  overall_similarity,
+  file.path(output_dirs[["Results"]], "Overall_Similarity.csv"),
+  row.names = FALSE
+)
 # spatial correlation results for genes of interest
 genes_in_sc <- genes_flat[genes_flat %in% rownames(sc)]
 results <- sc[genes_in_sc, c("correlationCoef", "pValuePermuteX", "pValuePermuteY"), drop = FALSE]
+
 # adding empirical p-value and cell type annotation to the results
 results$empirical_pval <- pmax(results$pValuePermuteX, results$pValuePermuteY)
 results$cell_type <- sapply(rownames(results), function(g) {
@@ -197,6 +243,11 @@ results$cell_type <- sapply(rownames(results), function(g) {
 })
 print(results)
 
+# per-category summary
+category_summary <- aggregate(correlationCoef ~ cell_type, data = results, FUN = function(x) c(mean = mean(x, na.rm = TRUE), n = length(x)))
+print(category_summary)
+category_summary <- data.frame(cell_type = category_summary$cell_type, mean_correlation = round(category_summary$correlationCoef[, "mean"], 3), n_genes = category_summary$correlationCoef[, "n"])
+write.csv(category_summary, file.path(output_dirs[["Results"]], "Category_Summary.csv"), row.names = FALSE)
 # saving the results to a CSV file in the results directory
 write.csv(results, file.path(output_dirs[["Results"]], "Results_Table.csv"), row.names = TRUE)
 
@@ -213,6 +264,7 @@ rast_assay <- if ("counts" %in% common_assays) {
   warning(paste("Using first shared assay:", common_assays[1]))
   common_assays[1]
 }
+
 # defining shared x and y limits for plotting based on the coordinates of both samples
 all_x <- Filter(is.finite, c(coords1[, "x"], coords2[, "x"]))
 all_y <- Filter(is.finite, c(coords1[, "y"], coords2[, "y"]))
@@ -222,13 +274,13 @@ shared_ylim <- c(min(all_y) - spatial_pad, max(all_y) + spatial_pad)
 coord_label <- paste(argv$scale, "scale")
 expr_label <- "rasterised raw counts"
 
-#// function building shared gene limits for raster plots
-# rasterised values may differ between samples, finding the shared limits for each gene across both samples needed to ensure consistent color scaling in the plots
-# @rastList: list of rasterised SpatialExperiment objects for each sample
-# @gene: gene name for which to find the shared limits
-# @assay_name: name of the assay to use for extracting raster values
-# @name1: name of the first sample
-# @name2: name of the second sample
+# building shared gene limits for raster plots
+#   rasterised values may differ between samples, finding the shared limits for each gene across both samples needed to ensure consistent color scaling in the plots
+#   @rastList: list of rasterised SpatialExperiment objects for each sample
+#   @gene: gene name for which to find the shared limits
+#   @assay_name: name of the assay to use for extracting raster values
+#   @name1: name of the first sample
+#   @name2: name of the second sample
 
 get_shared_gene_lims <- function(rastList, gene, assay_name, name1, name2) {
   vals <- Filter(is.finite, as.numeric(c(assay(rastList[[name1]], assay_name)[gene, ], assay(rastList[[name2]], assay_name)[gene, ])))
@@ -237,36 +289,38 @@ get_shared_gene_lims <- function(rastList, gene, assay_name, name1, name2) {
   if (limits[1] == limits[2]) limits <- limits + c(-0.5, 0.5)
   return(limits)
 }
-#// function creating single raster plot for a given gene and sample
-# @rast: rasterised SpatialExperiment object for the sample
-# @name: name of the sample
-# @gene: gene name for which to create the raster plot
-# @gene_limits: shared limits for the gene across both samples for consistent color scaling
-# @rast_assay: name of the assay to use for extracting raster values
-# @shared_xlim: shared x-axis limits for the plot
-# @shared_ylim: shared y-axis limits for the plot
-# @coord_label: axis label describing the coordinate space (e.g. "hires scale")
-# @expr_label: legend label describing the expression values (e.g. "rasterised raw counts")
+
+# creating single raster plot for a given gene and sample
+#   @rast: rasterised SpatialExperiment object for the sample
+#   @name: name of the sample
+#   @gene: gene name for which to create the raster plot
+#   @gene_limits: shared limits for the gene across both samples for consistent color scaling
+#   @rast_assay: name of the assay to use for extracting raster values
+#   @shared_xlim: shared x-axis limits for the plot
+#   @shared_ylim: shared y-axis limits for the plot
+#   @coord_label: axis label describing the coordinate space (e.g. "hires scale")
+#   @expr_label: legend label describing the expression values (e.g. "rasterised raw counts")
 
 make_single_raster <- function(rast, name, gene, gene_limits, rast_assay, shared_xlim, shared_ylim, coord_label, expr_label) {
-  plotRaster(rast, assay_name = rast_assay, feature_name = gene, plotTitle = paste(name, "-", gene)) + 
-  scale_fill_viridis_c(limits = gene_limits, oob = scales::squish, name = paste0(gene, "\n", expr_label)) + 
-  coord_sf(xlim = shared_xlim, ylim = shared_ylim, expand = FALSE, clip = "off") + labs(
-    x = paste("x coordinate (", coord_label, ")"),
-    y = paste("y coordinate (", coord_label, ")")
-  ) + theme(plot.margin = margin(10, 10, 10, 10))
+  plotRaster(rast, assay_name = rast_assay, feature_name = gene, plotTitle = paste(name, "-", gene)) +
+    scale_fill_viridis_c(limits = gene_limits, oob = scales::squish, name = paste0(gene, "\n", expr_label)) +
+    coord_sf(xlim = shared_xlim, ylim = shared_ylim, expand = FALSE, clip = "off") + labs(
+      x = paste("x coordinate (", coord_label, ")"),
+      y = paste("y coordinate (", coord_label, ")")
+    ) + theme(plot.margin = margin(10, 10, 10, 10))
 }
-#// function joining raster plots for a single gene across two samples
-# creates a side-by-side patchwork plot with a shared fill scale for comparability
-# @gene: gene to plot
-# @rastList: named list of rasterised SpatialExperiment objects
-# @rast_assay: assay name to extract expression values from
-# @name1: name of the aligned sample
-# @name2: name of the reference sample
-# @shared_xlim: shared x-axis limits for spatial comparability
-# @shared_ylim: shared y-axis limits for spatial comparability
-# @coord_label: axis label describing the coordinate space (e.g. "hires scale")
-# @expr_label: legend label describing the expression values (e.g. "rasterised raw counts")
+
+# joining raster plots for a single gene across two samples
+#   creates a side-by-side patchwork plot with a shared fill scale for comparability
+#   @gene: gene to plot
+#   @rastList: named list of rasterised SpatialExperiment objects
+#   @rast_assay: assay name to extract expression values from
+#   @name1: name of the aligned sample
+#   @name2: name of the reference sample
+#   @shared_xlim: shared x-axis limits for spatial comparability
+#   @shared_ylim: shared y-axis limits for spatial comparability
+#   @coord_label: axis label describing the coordinate space (e.g. "hires scale")
+#   @expr_label: legend label describing the expression values (e.g. "rasterised raw counts")
 
 make_raster_pair <- function(gene, rastList, rast_assay, name1, name2, shared_xlim, shared_ylim, coord_label, expr_label) {
   gene_limits <- get_shared_gene_lims(rastList, gene, rast_assay, name1, name2)
@@ -303,7 +357,7 @@ for (gene in genes_flat) {
   save_plot(pixelClass(input = ss, gene = gene), file.path(output_dirs[["Pixel_Class"]], paste0(gene, "_PixelClass.png")), width = 10, height = 5)
 }
 
-## final summary report
+# final summary report
 mean_corr <- mean(results$correlationCoef, na.rm = TRUE)
 median_corr <- median(results$correlationCoef, na.rm = TRUE)
 n_sig <- sum(results$empirical_pval < 0.05, na.rm = TRUE)
@@ -324,8 +378,10 @@ summary_text <- paste(
   paste0("Matched spots: ", ncol(counts1_matched), " / ", ncol(counts2_matched)),
   paste0("Genes analyzed: ", nrow(results), "   Significant (p<0.05): ", n_sig, " / ", nrow(results)),
   paste0("Mean r = ", round(mean_corr, 3), "   Median r = ", round(median_corr, 3)),
-  paste0("Best: ", best_gene, " (r=", round(max(results$correlationCoef, na.rm = TRUE), 3),
-         ")   Worst: ", worst_gene, " (r=", round(min(results$correlationCoef, na.rm = TRUE), 3), ")"),
+  paste0(
+    "Best: ", best_gene, " (r=", round(max(results$correlationCoef, na.rm = TRUE), 3),
+    ")   Worst: ", worst_gene, " (r=", round(min(results$correlationCoef, na.rm = TRUE), 3), ")"
+  ),
   "",
   fit_quality,
   sep = "\n"
@@ -333,7 +389,8 @@ summary_text <- paste(
 
 text_panel <- ggplot() +
   annotate("text", x = 0, y = 0, label = summary_text, hjust = 0, vjust = 1, size = 4, family = "mono") +
-  xlim(0, 10) + ylim(-6, 1) +
+  xlim(0, 10) +
+  ylim(-6, 1) +
   theme_void()
 
 # results table
@@ -342,7 +399,7 @@ table_panel <- tableGrob(
   theme = ttheme_minimal(base_size = 8)
 )
 
-# key figures: reusing the best-correlated gene's raster pair and correlation plot
+# reusing the best-correlated gene's raster pair and correlation plot
 best_gene_limits <- get_shared_gene_lims(rastList, best_gene, rast_assay, sample_aligned_name, sample_reference_name)
 key_raster <- make_raster_pair(
   best_gene, rastList, rast_assay, sample_aligned_name, sample_reference_name,
